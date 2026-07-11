@@ -18,6 +18,7 @@ Usage:
 
 Output (stdout, single line):
     {"ticker": "WIPRO.NS", "trade_date": "2026-07-15", "rating": "Buy",
+     "holding_recommendation": "Square Off Intraday",
      "final_trade_decision": "...", "generated_at": "2026-07-15T09:03:11+00:00",
      "cost_usd": 0.0412, "token_usage": {"claude-sonnet-4-6": {"input_tokens": 8000, ...}}}
 
@@ -33,6 +34,7 @@ from datetime import datetime, timezone
 
 from langchain_core.callbacks import UsageMetadataCallbackHandler
 
+from tradingagents.agents.utils.rating import parse_holding_recommendation
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -101,6 +103,7 @@ def main() -> int:
         ta = TradingAgentsGraph(debug=False, config=config, callbacks=[usage_handler])
         final_state, rating = ta.propagate(args.ticker, args.trade_date, asset_type=args.asset_type)
         final_decision = final_state["final_trade_decision"]
+        holding_recommendation = parse_holding_recommendation(final_decision)
     except Exception as exc:  # noqa: BLE001 — report cleanly on stderr, never on stdout
         print(f"decide.py failed for {args.ticker} on {args.trade_date}: {exc}", file=sys.stderr)
         return 1
@@ -115,6 +118,7 @@ def main() -> int:
         "trade_date": args.trade_date,
         "asset_type": args.asset_type,
         "rating": rating,
+        "holding_recommendation": holding_recommendation,
         "final_trade_decision": final_decision,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "cost_usd": cost_usd,
