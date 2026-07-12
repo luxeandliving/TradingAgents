@@ -12,9 +12,18 @@ Ticker must include the exchange suffix TradingAgents expects (see README.md,
 e.g. "RELIANCE.NS" for NSE India, "WIPRO.NS", plain "NVDA" for US) — this script
 does not guess or normalize tickers.
 
+--context (trading-workspace#37, optional) carries a JSON blob of a prior
+technical signal from an external scanner (news-gap-ml's leg-3 trigger, which
+*is* options-signal-bot's own stock_decisions/decision_features row) — passed
+through to the market analyst as context to reason about, not ground truth to
+trust blindly. Only news-gap-ml's technical-trigger leg has anything to hand
+over here; news/global-shock triggers have no equivalent prior signal, so they
+call this script without --context, same as before.
+
 Usage:
     python scripts/decide.py --ticker WIPRO.NS --date 2026-07-15
     python scripts/decide.py --ticker NVDA --date 2026-07-15 --asset-type stock
+    python scripts/decide.py --ticker WIPRO.NS --date 2026-07-15 --context '{"side": "long", "score": 78.5, ...}'
 
 Output (stdout, single line):
     {"ticker": "WIPRO.NS", "trade_date": "2026-07-15", "rating": "Buy",
@@ -90,18 +99,62 @@ def _build_config(ticker: str) -> dict:
     return config
 
 
+# Ordered (field, label) pairs surfaced from a --context payload, if present.
+# Field names match options-signal-bot's stock_decisions/decision_features
+# columns (trading-workspace#37) — not every field is always populated
+# (decision_features has no historical backfill), so missing ones are skipped.
+_CONTEXT_DETAIL_FIELDS = (
+    ("structure", "structure"), ("rsi14", "RSI14"), ("ema20", "EMA20"), ("ema50", "EMA50"),
+    ("atr14", "ATR14"), ("pullback_atr", "pullback (ATR)"),
+    ("entry_price", "entry"), ("stop_price", "stop"), ("target_price", "target"),
+)
+
+
+def _format_external_signal_context(raw_json: str) -> str:
+    """Turn a --context JSON blob into a natural-language passage for the
+    market analyst's prompt. Framed so the analyst reasons *about* the
+    scanner's finding rather than re-deriving it from scratch (the point of
+    #37) while still forming its own independent view (not "trust it
+    blindly" — the whole reason this graph has a debate/risk structure)."""
+    try:
+        signal = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        print(f"decide.py: --context was not valid JSON ({exc}), ignoring: {raw_json[:200]!r}", file=sys.stderr)
+        return ""
+
+    parts = [
+        f"A separate technical scanner already flagged this stock today "
+        f"({signal.get('side', 'unknown')} {signal.get('action', 'signal')}, "
+        f"score {signal.get('score', '?')}/100)."
+    ]
+    details = [f"{label}={signal[key]}" for key, label in _CONTEXT_DETAIL_FIELDS if signal.get(key) is not None]
+    if details:
+        parts.append("Scanner detail: " + ", ".join(details) + ".")
+    parts.append(
+        "Treat this as one input to weigh alongside your own independent analysis, "
+        "not as ground truth — verify or challenge it with your own tools rather than assuming it holds."
+    )
+    return " ".join(parts)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ticker", required=True, help='e.g. "WIPRO.NS", "RELIANCE.NS", "NVDA"')
     parser.add_argument("--date", required=True, dest="trade_date", help="YYYY-MM-DD")
     parser.add_argument("--asset-type", default="stock", choices=["stock", "crypto"])
+    parser.add_argument("--context", default=None, help="JSON blob of a prior technical signal (trading-workspace#37)")
     args = parser.parse_args()
+
+    external_signal_context = _format_external_signal_context(args.context) if args.context else ""
 
     usage_handler = UsageMetadataCallbackHandler()
     try:
         config = _build_config(args.ticker)
         ta = TradingAgentsGraph(debug=False, config=config, callbacks=[usage_handler])
-        final_state, rating = ta.propagate(args.ticker, args.trade_date, asset_type=args.asset_type)
+        final_state, rating = ta.propagate(
+            args.ticker, args.trade_date, asset_type=args.asset_type,
+            external_signal_context=external_signal_context,
+        )
         final_decision = final_state["final_trade_decision"]
         holding_recommendation = parse_holding_recommendation(final_decision)
     except Exception as exc:  # noqa: BLE001 — report cleanly on stderr, never on stdout
