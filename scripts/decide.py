@@ -137,6 +137,47 @@ def _format_external_signal_context(raw_json: str) -> str:
     return " ".join(parts)
 
 
+def run_decision(ticker: str, trade_date: str, asset_type: str = "stock", context: str | None = None) -> dict:
+    """Run one propagate() decision and return the result dict (hermes#213).
+
+    Extracted from main() so both the CLI below and scripts/service.py's
+    HTTP endpoint share one implementation of the actual decision-making
+    call -- only the transport (argv/stdout vs. HTTP request/response)
+    differs between callers.
+
+    Raises on failure; callers decide how to report it (the CLI prints to
+    stderr and exits 1, the HTTP service returns a 500 with the exception
+    detail).
+    """
+    external_signal_context = _format_external_signal_context(context) if context else ""
+
+    usage_handler = UsageMetadataCallbackHandler()
+    config = _build_config(ticker)
+    ta = TradingAgentsGraph(debug=False, config=config, callbacks=[usage_handler])
+    final_state, rating = ta.propagate(
+        ticker, trade_date, asset_type=asset_type,
+        external_signal_context=external_signal_context,
+    )
+    final_decision = final_state["final_trade_decision"]
+    holding_recommendation = parse_holding_recommendation(final_decision)
+
+    cost_usd, unpriced_models = _compute_cost(usage_handler.usage_metadata)
+    if unpriced_models:
+        print(f"decide.py: no pricing entry for model(s) {unpriced_models} — cost_usd is a partial total", file=sys.stderr)
+
+    return {
+        "ticker": ticker,
+        "trade_date": trade_date,
+        "asset_type": asset_type,
+        "rating": rating,
+        "holding_recommendation": holding_recommendation,
+        "final_trade_decision": final_decision,
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "cost_usd": cost_usd,
+        "token_usage": usage_handler.usage_metadata,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ticker", required=True, help='e.g. "WIPRO.NS", "RELIANCE.NS", "NVDA"')
@@ -145,38 +186,13 @@ def main() -> int:
     parser.add_argument("--context", default=None, help="JSON blob of a prior technical signal (trading-workspace#37)")
     args = parser.parse_args()
 
-    external_signal_context = _format_external_signal_context(args.context) if args.context else ""
-
-    usage_handler = UsageMetadataCallbackHandler()
     try:
-        config = _build_config(args.ticker)
-        ta = TradingAgentsGraph(debug=False, config=config, callbacks=[usage_handler])
-        final_state, rating = ta.propagate(
-            args.ticker, args.trade_date, asset_type=args.asset_type,
-            external_signal_context=external_signal_context,
-        )
-        final_decision = final_state["final_trade_decision"]
-        holding_recommendation = parse_holding_recommendation(final_decision)
+        result = run_decision(args.ticker, args.trade_date, args.asset_type, args.context)
     except Exception as exc:  # noqa: BLE001 — report cleanly on stderr, never on stdout
         print(f"decide.py failed for {args.ticker} on {args.trade_date}: {exc}", file=sys.stderr)
         return 1
 
-    cost_usd, unpriced_models = _compute_cost(usage_handler.usage_metadata)
-    if unpriced_models:
-        print(f"decide.py: no pricing entry for model(s) {unpriced_models} — cost_usd is a partial total", file=sys.stderr)
-    print(f"decide.py: ${cost_usd:.4f} for this call ({usage_handler.usage_metadata})", file=sys.stderr)
-
-    result = {
-        "ticker": args.ticker,
-        "trade_date": args.trade_date,
-        "asset_type": args.asset_type,
-        "rating": rating,
-        "holding_recommendation": holding_recommendation,
-        "final_trade_decision": final_decision,
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "cost_usd": cost_usd,
-        "token_usage": usage_handler.usage_metadata,
-    }
+    print(f"decide.py: ${result['cost_usd']:.4f} for this call ({result['token_usage']})", file=sys.stderr)
     print(json.dumps(result))
     return 0
 
