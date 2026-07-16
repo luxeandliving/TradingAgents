@@ -39,7 +39,14 @@ jobs:
 
       - name: Resolve tag
         id: tag
-        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          # Docker/GHCR repository names must be all-lowercase --
+          # github.repository preserves this repo's real casing
+          # (luxeandliving/TradingAgents), which buildx rejects outright
+          # ("repository name must be lowercase") if used raw in a tag.
+          # Confirmed live: the first push attempt failed exactly this way.
+          echo "repo_lc=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Build image (not pushed yet)
         uses: docker/build-push-action@v7
@@ -86,5 +93,5 @@ jobs:
           push: true
           build-args: APP_VERSION=${{ steps.tag.outputs.sha }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.sha }}
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ steps.tag.outputs.repo_lc }}:${{ steps.tag.outputs.sha }}
+            ghcr.io/${{ steps.tag.outputs.repo_lc }}:latest
