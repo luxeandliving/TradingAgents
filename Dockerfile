@@ -33,4 +33,14 @@ WORKDIR /home/appuser/app
 
 COPY --from=builder --chown=appuser:appuser /build .
 
+# hermes#213: only meaningful for the tradingagents-service compose
+# override (entrypoint/command swapped to run uvicorn instead of the CLI
+# below) -- deploy.sh polls this status to know when the container is ready
+# to record as .last_good_version. Harmless no-op signal on the interactive
+# `tradingagents` CLI service (nothing listens on 8100 there; it just shows
+# "unhealthy", which nothing consumes).
+EXPOSE 8100
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health', timeout=3)" || exit 1
+
 ENTRYPOINT ["tradingagents"]
