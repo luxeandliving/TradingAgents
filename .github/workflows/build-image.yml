@@ -1,0 +1,90 @@
+name: Build & push image
+
+# Builds the TradingAgents image and pushes it to GHCR
+# (ghcr.io/<owner>/TradingAgents), tagged by short commit SHA + latest --
+# same tag shape as hermes/options-signal-bot/news-gap-ml's own
+# build-image.yml, so deploy.sh can pin/roll back the same way.
+#
+# hermes#213: this image runs the decision HTTP service (scripts/service.py),
+# NOT the interactive `tradingagents` CLI the repo's existing Dockerfile
+# defaults to (ENTRYPOINT ["tradingagents"]) -- the compose deploy overrides
+# both entrypoint and command to run uvicorn instead. The Dockerfile itself
+# is untouched; it already installs the full package (including fastapi/
+# uvicorn, now core dependencies) and copies the whole source tree, so
+# scripts/service.py is present and importable either way.
+#
+# Trigger is push to main, plus pull_request so a broken Dockerfile is
+# caught before merge, not after (mirrors news-gap-ml's #201 posture).
+#
+# Smoke-tested INSIDE this workflow before push: boots the real service
+# entrypoint in a container (secret unset -- /decide would 403, but that's
+# not what's being checked) and hits /health for real over a published port,
+# same bar the earlier manual verification (local `uvicorn` + curl) used.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve tag
+        id: tag
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build image (not pushed yet)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          build-args: APP_VERSION=${{ steps.tag.outputs.sha }}
+          tags: tradingagents:smoke-${{ steps.tag.outputs.sha }}
+
+      - name: Smoke check (boot the real service, hit /health)
+        run: |
+          docker run -d --name ta-smoke -p 18100:8100 \
+            --entrypoint python \
+            tradingagents:smoke-${{ steps.tag.outputs.sha }} \
+            -m uvicorn scripts.service:app --host 0.0.0.0 --port 8100
+          for i in $(seq 1 15); do
+            if curl -sf http://127.0.0.1:18100/health >/dev/null; then
+              echo "health check passed"
+              docker logs ta-smoke
+              docker stop ta-smoke
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error:: service never became healthy"
+          docker logs ta-smoke
+          docker stop ta-smoke
+          exit 1
+
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # packages:write — no PAT needed for the repo's own namespace
+
+      - name: Push image (smoke check passed)
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          build-args: APP_VERSION=${{ steps.tag.outputs.sha }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.sha }}
+            ghcr.io/${{ github.repository }}:latest

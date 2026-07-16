@@ -8,6 +8,27 @@ services:
     tty: true
     stdin_open: true
 
+  # Decision HTTP service (hermes#213) -- persistent `docker compose up -d`
+  # service, unlike the interactive `tradingagents` service above (tty/
+  # stdin_open, meant for `run -it`) or news-gap-ml/options-signal-bot's
+  # per-tick `run --rm` shape, since this must stay listening for requests.
+  # No `ports:` published to the host -- reachable only from other
+  # containers on the shared hermes-internal network (news-gap-ml joins the
+  # same network to call it by the `tradingagents-service` alias below).
+  # TRADINGAGENTS_SERVICE_SECRET is defense in depth on top of that network
+  # isolation, not a substitute for it.
+  tradingagents-service:
+    image: ghcr.io/luxeandliving/tradingagents:${APP_VERSION:-latest}
+    entrypoint: ["python"]
+    command: ["-m", "uvicorn", "scripts.service:app", "--host", "0.0.0.0", "--port", "8100"]
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      hermes-internal:
+        aliases:
+          - tradingagents-service
+
   ollama:
     image: ollama/ollama:latest
     volumes:
@@ -34,3 +55,11 @@ services:
 volumes:
   tradingagents_data:
   ollama_data:
+
+networks:
+  # Created once on the droplet (deploy.sh, idempotent `docker network
+  # create`) so news-gap-ml's container can reach this service by name --
+  # not created here since docker compose would otherwise try to manage
+  # (and remove) a network another project also depends on.
+  hermes-internal:
+    external: true
