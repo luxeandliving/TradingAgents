@@ -77,7 +77,19 @@ class TestServiceAuth:
     def test_health_requires_no_auth(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        assert resp.json()["status"] == "ok"
+
+    def test_health_reports_deployed_version(self, client, monkeypatch):
+        """hermes#218's cross-service health page reads this -- baked in via
+        the Dockerfile's ARG/ENV APP_VERSION, defaults to 'dev' locally."""
+        monkeypatch.setenv("APP_VERSION", "d94b57c")
+        resp = client.get("/health")
+        assert resp.json()["version"] == "d94b57c"
+
+    def test_health_version_defaults_to_dev_when_unset(self, client, monkeypatch):
+        monkeypatch.delenv("APP_VERSION", raising=False)
+        resp = client.get("/health")
+        assert resp.json()["version"] == "dev"
 
     def test_decide_rejects_missing_auth_header(self, client, service):
         service._SERVICE_SECRET = "real-secret"
