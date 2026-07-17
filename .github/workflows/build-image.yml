@@ -21,20 +21,33 @@ name: Build & push image
 # not what's being checked) and hits /health for real over a published port,
 # same bar the earlier manual verification (local `uvicorn` + curl) used.
 #
-# No release-triggered deploy.yml here yet (unlike hermes/options-signal-bot/
-# news-gap-ml, hermes#210) -- this service is currently deployed as part of
-# Hermes' own docker-compose.yml (tradingagents-service), pinned by
-# scripts/deploy.sh's TradingAgents block, not a release tag in this repo.
-# If/when this repo gets its own release-triggered deploy, its tag should
-# follow the same convention as the other three repos (matches Hermes'
-# Hermes_v{major}.{minor}.{patch}.{YYYYMMDD}, e.g. Hermes_v0.3.13.20260716):
-# TradingAgents_v{major}.{minor}.{patch}.{YYYYMMDD}.
+# Continuous build on push to main (unchanged) PLUS `workflow_call` (hermes#210)
+# so deploy.yml can build+push a specific release ref on demand -- same shape
+# as Hermes/options-signal-bot/news-gap-ml's own build-image.yml/deploy.yml
+# relationship. Release tag convention: TradingAgents_v{major}.{minor}.
+# {patch}.{YYYYMMDD}, matching Hermes' Hermes_v{...} shape.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      ref:
+        description: "Tag/branch to build (blank = this ref)"
+        required: false
+        type: string
+        default: ""
+    outputs:
+      image_tag:
+        description: "Resolved tag that was built & pushed to GHCR"
+        value: ${{ jobs.build-push.outputs.image_tag }}
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag/branch to build (blank = this ref)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -43,13 +56,22 @@ permissions:
 jobs:
   build-push:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tag.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Resolve tag
         id: tag
         run: |
-          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          REF="${{ inputs.ref }}"
+          if [ -n "$REF" ]; then
+            echo "sha=$REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
           # Docker/GHCR repository names must be all-lowercase --
           # github.repository preserves this repo's real casing
           # (luxeandliving/TradingAgents), which buildx rejects outright
@@ -87,7 +109,7 @@ jobs:
           exit 1
 
       - name: Login to GHCR
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -95,7 +117,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}   # packages:write — no PAT needed for the repo's own namespace
 
       - name: Push image (smoke check passed)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v7
         with:
           context: .

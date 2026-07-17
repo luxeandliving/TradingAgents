@@ -1,0 +1,171 @@
+name: Deploy
+
+# Release-triggered deploy (hermes#210), matching Hermes's own deploy.yml
+# pattern: resolve -> build -> deploy (pull + pin + health-check + auto-
+# rollback, rollback image verified rather than trusted on exit code alone --
+# same bug class as Hermes' incident #143).
+#
+# Unlike options-signal-bot/news-gap-ml (cron-invoked `run --rm`, hermes#210),
+# tradingagents-service is a PERSISTENT `docker compose up -d` service, same
+# deploy shape as Hermes itself -- health-checked via the container's own
+# Dockerfile HEALTHCHECK (TradingAgents#9), not an HTTP curl, since this
+# service publishes no host port (reachable only on the internal
+# hermes-internal network news-gap-ml also joins).
+#
+# scripts/deploy.sh (hermes repo) is UNCHANGED and still deploys this service
+# too as part of its own run -- same posture Hermes keeps both paths for
+# itself. Running both back-to-back is harmless (pull+up -d is idempotent);
+# just avoid overlapping runs (concurrency group below).
+#
+# No market-hours guard: a restart briefly interrupts news-gap-ml's ability
+# to call /decide (a few seconds, per the health-poll below), but a failed/
+# timed-out call there is already logged and swallowed by design (see
+# live_listener.py's own docstring) -- worst case is one missed decision
+# call, not a broken live position the way restarting Hermes' own process is.
+#
+# Release tag convention (matches Hermes' Hermes_v{major}.{minor}.{patch}.
+# {YYYYMMDD}, e.g. Hermes_v0.3.13.20260716): TradingAgents_v{major}.{minor}.
+# {patch}.{YYYYMMDD}.
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or branch to deploy (blank = the tag this runs on)"
+        required: false
+        default: ""
+
+concurrency:
+  group: production-deploy-tradingagents
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.ref.outputs.ref }}
+    steps:
+      - name: Resolve deploy ref
+        id: ref
+        run: |
+          REF="${{ inputs.ref }}"
+          [ -z "$REF" ] && REF="${{ github.ref_name }}"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Deploying ref: $REF"
+
+  build:
+    needs: resolve
+    uses: ./.github/workflows/build-image.yml
+    with:
+      ref: ${{ needs.resolve.outputs.ref }}
+    secrets: inherit
+
+  deploy:
+    name: Deploy to production
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH (pull + pin + health-check + verified auto-rollback)
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            TRADINGAGENTS_DIR=/home/hermes/TradingAgents
+            APP_USER=hermes
+            REF="${{ needs.resolve.outputs.ref }}"
+            STATE_FILE="$TRADINGAGENTS_DIR/.last_good_version"
+            IMAGE="ghcr.io/luxeandliving/tradingagents"
+
+            dc() { sudo -u "$APP_USER" docker compose -f "$TRADINGAGENTS_DIR/docker-compose.yml" "$@"; }
+            set_app_version() {
+              # Same pinning pattern as Hermes's own deploy.yml (#145, incident
+              # #143's root cause) -- .env must hold an explicit immutable tag
+              # after every deploy attempt, never a transient shell var.
+              if sudo -u "$APP_USER" grep -q '^APP_VERSION=' "$TRADINGAGENTS_DIR/.env" 2>/dev/null; then
+                sudo -u "$APP_USER" sed -i "s|^APP_VERSION=.*|APP_VERSION=$1|" "$TRADINGAGENTS_DIR/.env"
+              else
+                echo "APP_VERSION=$1" | sudo -u "$APP_USER" tee -a "$TRADINGAGENTS_DIR/.env" > /dev/null
+              fi
+              echo "APP_VERSION pinned to: $1"
+            }
+            # Verify the image actually pulled for a given tag really is that
+            # tag, by reading its own baked-in APP_VERSION build-arg (hermes#210:
+            # closes the "silently redeployed :latest instead of the pinned
+            # rollback tag" gap -- same bug class as Hermes' incident #143).
+            verify_image_tag() {
+              local expect="$1"
+              local actual
+              actual=$(sudo -u "$APP_USER" docker inspect "$IMAGE:$expect" \
+                --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+                | grep '^APP_VERSION=' | cut -d= -f2 || echo "")
+              if [ "$actual" != "$expect" ]; then
+                echo "::warning::Image tag verification mismatch -- expected $expect, image reports APP_VERSION=$actual"
+                return 1
+              fi
+              echo "Image tag verified: $IMAGE:$expect (APP_VERSION=$actual)"
+            }
+            _healthy() {
+              status=$(sudo -u "$APP_USER" docker inspect --format '{{.State.Health.Status}}' \
+                "$(dc ps -q tradingagents-service)" 2>/dev/null || echo "unknown")
+              [ "$status" = "healthy" ]
+            }
+
+            cd "$TRADINGAGENTS_DIR"
+            if ! sudo -u "$APP_USER" grep -q '^TRADINGAGENTS_SERVICE_SECRET=' "$TRADINGAGENTS_DIR/.env" 2>/dev/null || \
+               [ -z "$(sudo -u "$APP_USER" grep '^TRADINGAGENTS_SERVICE_SECRET=' "$TRADINGAGENTS_DIR/.env" | cut -d= -f2-)" ]; then
+              echo "::error::TRADINGAGENTS_SERVICE_SECRET is missing/empty in $TRADINGAGENTS_DIR/.env — the service will fail closed on every request. Aborting."
+              exit 1
+            fi
+
+            PREV=$(sudo -u "$APP_USER" cat "$STATE_FILE" 2>/dev/null || echo "")
+            echo "Rollback point: ${PREV:-<none — first tracked deploy>}"
+
+            set_app_version "$REF"
+            dc pull tradingagents-service
+            verify_image_tag "$REF" || echo "::warning::Proceeding to health-check anyway -- the health check itself is the real gate."
+
+            echo "--- Starting tradingagents-service ..."
+            dc up -d tradingagents-service
+
+            echo "--- Waiting for tradingagents-service to report healthy ..."
+            HEALTHY=0
+            for i in $(seq 1 30); do
+              if _healthy; then HEALTHY=1; break; fi
+              sleep 2
+            done
+
+            if [ "$HEALTHY" = "1" ]; then
+              echo "tradingagents-service is healthy"
+              echo "$REF" | sudo -u "$APP_USER" tee "$STATE_FILE" > /dev/null
+              sudo -u "$APP_USER" bash -c "date -u +%Y%m%dT%H%M%SZ > '$TRADINGAGENTS_DIR/.last_deployed'"
+              echo "Deploy OK — $REF"
+            else
+              echo "::error::tradingagents-service never became healthy on $REF"
+              dc logs --tail=50 tradingagents-service 2>/dev/null | sed 's/^/    /' || true
+              if [ -n "$PREV" ]; then
+                echo "Rolling back to last known-good: $PREV"
+                set_app_version "$PREV"
+                dc pull tradingagents-service
+                verify_image_tag "$PREV"
+                dc up -d tradingagents-service
+                sleep 4
+                if _healthy; then
+                  echo "Rolled back — $PREV is healthy. Deploy of $REF FAILED but the service is intact."
+                else
+                  echo "::error::Restored image $PREV ALSO fails health check — TradingAgents service may be broken. Investigate immediately."
+                fi
+              else
+                echo "::error::No prior known-good tag to roll back to (first deploy?). tradingagents-service left on the failed image $REF — investigate immediately."
+              fi
+              exit 1
+            fi
