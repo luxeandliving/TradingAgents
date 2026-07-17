@@ -61,8 +61,9 @@ def check_auth(authorization: str | None) -> None:
 
 @app.get("/health")
 def health() -> dict:
-    """No auth -- used for the deploy smoke check, carries no sensitive data."""
-    return {"status": "ok"}
+    """No auth -- used for the deploy smoke check and hermes#218's cross-service
+    health page, carries no sensitive data."""
+    return {"status": "ok", "version": os.getenv("APP_VERSION", "dev")}
 
 
 @app.post("/decide")
