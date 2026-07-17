@@ -20,6 +20,15 @@ name: Build & push image
 # entrypoint in a container (secret unset -- /decide would 403, but that's
 # not what's being checked) and hits /health for real over a published port,
 # same bar the earlier manual verification (local `uvicorn` + curl) used.
+#
+# No release-triggered deploy.yml here yet (unlike hermes/options-signal-bot/
+# news-gap-ml, hermes#210) -- this service is currently deployed as part of
+# Hermes' own docker-compose.yml (tradingagents-service), pinned by
+# scripts/deploy.sh's TradingAgents block, not a release tag in this repo.
+# If/when this repo gets its own release-triggered deploy, its tag should
+# follow the same convention as the other three repos (matches Hermes'
+# Hermes_v{major}.{minor}.{patch}.{YYYYMMDD}, e.g. Hermes_v0.3.13.20260716):
+# TradingAgents_v{major}.{minor}.{patch}.{YYYYMMDD}.
 on:
   push:
     branches: [main]
