@@ -12,6 +12,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
 )
 from tradingagents.agents.utils.structured import (
+    NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -46,7 +47,8 @@ def create_trader(llm, debate_enabled: bool = True):
                     "role": "system",
                     "content": (
                         _NO_POSITION_INSTRUCTION
-                        + " Anchor your reasoning in the analysts' reports and the research plan."
+                        + " Anchor your reasoning in the analysts' reports and the research plan. "
+                        + NO_EXTERNAL_TOOLS
                         + get_language_instruction()
                     ),
                 },
@@ -73,7 +75,8 @@ def create_trader(llm, debate_enabled: bool = True):
                         _NO_POSITION_INSTRUCTION
                         + " No research debate or manager synthesis ran ahead of you for this "
                         "run -- you are reading the raw analyst reports directly and forming "
-                        "your own view from them."
+                        "your own view from them. "
+                        + NO_EXTERNAL_TOOLS
                         + get_language_instruction()
                     ),
                 },
