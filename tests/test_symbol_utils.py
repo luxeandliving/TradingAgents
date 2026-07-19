@@ -35,6 +35,14 @@ class TestNormalizeSymbol(unittest.TestCase):
         self.assertEqual(normalize_symbol("NAS100"), "^NDX")
         self.assertEqual(normalize_symbol("US30"), "^DJI")
 
+    def test_mcx_commodity_aliases_map_to_global_benchmark(self):
+        """trading-workspace#68 -- MCX's own mini-contract names resolve to
+        the global USD benchmark future TradingAgents actually analyzes, not
+        MCX's own INR contract (which this repo has no data source for)."""
+        self.assertEqual(normalize_symbol("CRUDEOILM"), "CL=F")
+        self.assertEqual(normalize_symbol("GOLDM"), "GC=F")
+        self.assertEqual(normalize_symbol("crudeoilm"), "CL=F")
+
     def test_forex_pairs_get_x_suffix(self):
         self.assertEqual(normalize_symbol("EURUSD"), "EURUSD=X")
         self.assertEqual(normalize_symbol("GBPJPY"), "GBPJPY=X")

@@ -60,6 +60,13 @@ _ALIASES = {
     "BCOUSD": "BZ=F", "UKOIL": "BZ=F", "BRENT": "BZ=F",
     "NATGAS": "NG=F", "XNGUSD": "NG=F",
     "COPPER": "HG=F", "XCUUSD": "HG=F",
+    # MCX mini-contract names (trading-workspace#68) -> the global USD
+    # benchmark future, not MCX's own INR contract. The news/macro driver
+    # (war, OPEC, Fed) is global and USD-denominated; the MCX mini contract
+    # is what's actually traded, but that mapping/execution stays entirely
+    # outside TradingAgents (tci-execution-bot's mcx_handler.py) -- this
+    # table only resolves what to *analyze*.
+    "CRUDEOILM": "CL=F", "GOLDM": "GC=F",
     # Index CFDs -> Yahoo index symbols
     "SPX500": "^GSPC", "US500": "^GSPC", "SPX": "^GSPC",
     "NAS100": "^NDX", "US100": "^NDX", "USTEC": "^NDX",
