@@ -120,6 +120,9 @@ def resolve_instrument_identity(ticker: str) -> dict:
     return identity
 
 
+_INSTRUMENT_LABELS = {"crypto": "asset", "commodity": "commodity"}
+
+
 def build_instrument_context(
     ticker: str,
     asset_type: str = "stock",
@@ -131,9 +134,16 @@ def build_instrument_context(
     :func:`resolve_instrument_identity`), the company name and business
     classification are injected so agents anchor to the real company rather
     than pattern-matching the price chart to a wrong one (#814).
+
+    ``asset_type="commodity"`` (trading-workspace#68) covers a global futures
+    benchmark (e.g. ``CL=F``/``GC=F``, resolved from an MCX mini-contract
+    name via symbol_utils.py) -- there is no "company" to anchor to, same
+    structural gap as crypto, so it gets the same no-fundamentals framing
+    below plus its own commodity-specific driver language.
     """
     is_crypto = asset_type == "crypto"
-    instrument_label = "asset" if is_crypto else "instrument"
+    is_commodity = asset_type == "commodity"
+    instrument_label = _INSTRUMENT_LABELS.get(asset_type, "instrument")
     context = (
         f"The {instrument_label} to analyze is `{ticker}`. "
         "Use this exact ticker in every tool call, report, and recommendation, "
@@ -144,7 +154,7 @@ def build_instrument_context(
     if identity:
         name = identity.get("company_name") or identity.get("name")
         if name:
-            details.append(f"{'Name' if is_crypto else 'Company'}: {name}")
+            details.append(f"{'Name' if is_crypto or is_commodity else 'Company'}: {name}")
         sector, industry = identity.get("sector"), identity.get("industry")
         if sector and industry:
             details.append(f"Business classification: {sector} / {industry}")
@@ -166,6 +176,14 @@ def build_instrument_context(
         context += (
             " Treat it as a crypto asset rather than a company, and do not "
             "assume company fundamentals are available."
+        )
+    elif is_commodity:
+        context += (
+            " Treat it as a commodity futures contract rather than a company, "
+            "and do not assume company fundamentals (earnings, balance sheet, "
+            "insider activity) are available -- reason from supply/demand "
+            "balance, inventories, OPEC+/central-bank policy, and geopolitical "
+            "developments instead."
         )
     return context
 

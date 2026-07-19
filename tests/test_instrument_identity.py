@@ -95,6 +95,22 @@ class BuildInstrumentContextTests(unittest.TestCase):
         self.assertIn("Name: Bitcoin USD", context)
         self.assertIn("crypto asset rather than a company", context)
 
+    def test_commodity_uses_commodity_label_and_keeps_hint(self):
+        """trading-workspace#68 -- CRUDEOILM/GOLDM (MCX mini-contract names)
+        resolve to a global benchmark future (CL=F/GC=F) upstream via
+        symbol_utils.py; the raw ticker passed here is whatever the caller
+        used (e.g. the MCX name), same as XAUUSD/GOLD already work for stock."""
+        context = build_instrument_context("CRUDEOILM", "commodity")
+        self.assertIn("commodity to analyze is `CRUDEOILM`", context)
+        self.assertIn("commodity futures contract rather than a company", context)
+        self.assertIn("supply/demand", context)
+
+    def test_commodity_with_resolved_identity_uses_name_label(self):
+        context = build_instrument_context(
+            "GC=F", "commodity", {"company_name": "Gold Futures"}
+        )
+        self.assertIn("Name: Gold Futures", context)
+
 
 @pytest.mark.unit
 class GetInstrumentContextFromStateTests(unittest.TestCase):
@@ -116,6 +132,12 @@ class GetInstrumentContextFromStateTests(unittest.TestCase):
             {"company_of_interest": "BTC-USD", "asset_type": "crypto"}
         )
         self.assertIn("crypto asset", context)
+
+    def test_fallback_respects_commodity_asset_type(self):
+        context = get_instrument_context_from_state(
+            {"company_of_interest": "CRUDEOILM", "asset_type": "commodity"}
+        )
+        self.assertIn("commodity futures contract", context)
 
 
 @pytest.mark.unit

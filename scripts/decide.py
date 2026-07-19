@@ -24,6 +24,11 @@ Usage:
     python scripts/decide.py --ticker WIPRO.NS --date 2026-07-15
     python scripts/decide.py --ticker NVDA --date 2026-07-15 --asset-type stock
     python scripts/decide.py --ticker WIPRO.NS --date 2026-07-15 --context '{"side": "long", "score": 78.5, ...}'
+    python scripts/decide.py --ticker CRUDEOILM --date 2026-07-15 --asset-type commodity
+        (trading-workspace#68 -- broker/MCX-style commodity names like
+        CRUDEOILM/GOLDM resolve to their global USD benchmark future, e.g.
+        CL=F/GC=F, via symbol_utils.py's alias table, same as XAUUSD/USOIL
+        already do for stock/crypto)
 
 Output (stdout, single line):
     {"ticker": "WIPRO.NS", "trade_date": "2026-07-15", "rating": "Buy",
@@ -182,7 +187,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ticker", required=True, help='e.g. "WIPRO.NS", "RELIANCE.NS", "NVDA"')
     parser.add_argument("--date", required=True, dest="trade_date", help="YYYY-MM-DD")
-    parser.add_argument("--asset-type", default="stock", choices=["stock", "crypto"])
+    parser.add_argument("--asset-type", default="stock", choices=["stock", "crypto", "commodity"])
     parser.add_argument("--context", default=None, help="JSON blob of a prior technical signal (trading-workspace#37)")
     args = parser.parse_args()
 
