@@ -66,7 +66,7 @@ _ALIASES = {
     # is what's actually traded, but that mapping/execution stays entirely
     # outside TradingAgents (tci-execution-bot's mcx_handler.py) -- this
     # table only resolves what to *analyze*.
-    "CRUDEOILM": "CL=F", "GOLDM": "GC=F",
+    "CRUDEOILM": "CL=F", "GOLDM": "GC=F", "SILVERM": "SI=F", "NATGASMINI": "NG=F",
     # Index CFDs -> Yahoo index symbols
     "SPX500": "^GSPC", "US500": "^GSPC", "SPX": "^GSPC",
     "NAS100": "^NDX", "US100": "^NDX", "USTEC": "^NDX",

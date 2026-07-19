@@ -42,6 +42,8 @@ class TestNormalizeSymbol(unittest.TestCase):
         self.assertEqual(normalize_symbol("CRUDEOILM"), "CL=F")
         self.assertEqual(normalize_symbol("GOLDM"), "GC=F")
         self.assertEqual(normalize_symbol("crudeoilm"), "CL=F")
+        self.assertEqual(normalize_symbol("SILVERM"), "SI=F")
+        self.assertEqual(normalize_symbol("NATGASMINI"), "NG=F")
 
     def test_forex_pairs_get_x_suffix(self):
         self.assertEqual(normalize_symbol("EURUSD"), "EURUSD=X")
