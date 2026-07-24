@@ -34,7 +34,12 @@ Output (stdout, single line):
     {"ticker": "WIPRO.NS", "trade_date": "2026-07-15", "rating": "Buy",
      "holding_recommendation": "Square Off Intraday",
      "final_trade_decision": "...", "generated_at": "2026-07-15T09:03:11+00:00",
-     "cost_usd": 0.0412, "token_usage": {"claude-sonnet-4-6": {"input_tokens": 8000, ...}}}
+     "cost_usd": 0.50, "token_usage": {"claude-sonnet-4-6": {"input_tokens": 8000, ...}}}
+    (TFR-215: cost_usd example updated to match the real observed average
+    ~$0.50/decision, not the original $0.0412 placeholder -- that number was
+    12x too low and was a real budgeting trap for anyone sizing MAX_TRIGGERS_
+    PER_POLL/day-cost ceilings off this docstring. See news-gap-ml's
+    live_listener.py (trading-workspace#86) for the measured figure.)
 
 On failure: non-zero exit code, error detail on stderr, nothing on stdout.
 """

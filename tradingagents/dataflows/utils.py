@@ -23,11 +23,12 @@ def in_news_window(pub_date, start_dt, end_dt) -> bool:
     return end_dt >= datetime.now() - relativedelta(days=1)
 
 # Tickers can contain letters, digits, dot, dash, underscore, caret
-# (index symbols like ^GSPC), equals (futures like GC=F), and plus
-# (forex/CFD symbols like XAUUSD+). None of these enable directory
-# traversal, so the value never escapes a containing directory when
-# interpolated into a path. Anything else is rejected.
-_TICKER_PATH_RE = re.compile(r"^[A-Za-z0-9._\-\^=+]+$")
+# (index symbols like ^GSPC), equals (futures like GC=F), plus
+# (forex/CFD symbols like XAUUSD+), and ampersand (NSE symbols with '&' in
+# the company name, e.g. M&M.NS -- Mahindra & Mahindra; TFR-215). None of
+# these enable directory traversal, so the value never escapes a containing
+# directory when interpolated into a path. Anything else is rejected.
+_TICKER_PATH_RE = re.compile(r"^[A-Za-z0-9._\-\^=+&]+$")
 
 
 def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
