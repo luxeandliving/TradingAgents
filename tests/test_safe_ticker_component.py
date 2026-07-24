@@ -19,6 +19,13 @@ class TestSafeTickerComponent(unittest.TestCase):
         for ticker in ("GC=F", "CL=F", "ES=F", "XAUUSD+", "EURUSD+"):
             self.assertEqual(safe_ticker_component(ticker), ticker)
 
+    def test_accepts_ampersand_in_nse_symbols(self):
+        # TFR-215: M&M.NS (Mahindra & Mahindra) previously raised ValueError
+        # on every request -- '&' is not a path-traversal character on any
+        # common filesystem, just missing from the allowed set.
+        for ticker in ("M&M.NS", "M&MFIN.NS"):
+            self.assertEqual(safe_ticker_component(ticker), ticker)
+
     def test_rejects_path_separators(self):
         for bad in (".", "..", "../etc", "a/b", "a\\b", "/abs", "..\\..\\x"):
             with self.assertRaises(ValueError):
