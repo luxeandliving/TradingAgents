@@ -2,10 +2,13 @@
 into a historical window.
 
 Regressions for #992 (flat articles bypassed the date filter), #1007 (global
-news injected future articles), #993 (empty-after-filter returned a blank body).
+news injected future articles), #993 (empty-after-filter returned a blank body),
+#1126 (in_news_window's upper bound was inclusive and it stripped tzinfo
+instead of converting to UTC, both fixed for every vendor sharing it -- see
+tradingagents/dataflows/utils.py).
 """
-import time
-from datetime import datetime
+import calendar
+from datetime import datetime, timezone
 
 import pytest
 
@@ -14,7 +17,10 @@ from tradingagents.dataflows.utils import in_news_window
 
 
 def _epoch(date_str):
-    return int(time.mktime(datetime.strptime(date_str, "%Y-%m-%d").timetuple()))
+    # calendar.timegm (not time.mktime) so this is host-timezone-independent --
+    # providerPublishTime is genuine UTC epoch seconds, and _extract_article_data
+    # now parses it as UTC-aware (#1126), so the fixture must encode it the same way.
+    return calendar.timegm(datetime.strptime(date_str, "%Y-%m-%d").timetuple())
 
 
 @pytest.mark.unit
@@ -44,6 +50,28 @@ def test_window_keeps_undated_in_live_window():
     start = datetime.now()
     end = datetime.now()
     assert in_news_window(None, start, end) is True
+
+
+@pytest.mark.unit
+def test_upper_bound_is_exclusive():
+    # #1126: an article stamped exactly midnight AFTER end_date leaked in under
+    # the old inclusive bound; the whole of end_date itself must still be kept.
+    start = datetime(2025, 5, 1)
+    end = datetime(2025, 5, 9)
+    midnight_after = datetime(2025, 5, 10, 0, 0, 0, tzinfo=timezone.utc)
+    last_moment = datetime(2025, 5, 9, 23, 59, 59, tzinfo=timezone.utc)
+    assert in_news_window(midnight_after, start, end) is False
+    assert in_news_window(last_moment, start, end) is True
+
+
+@pytest.mark.unit
+def test_offset_aware_timestamp_is_converted_not_truncated():
+    # #1126: 2025-05-10T01:00+05:00 is really 2025-05-09T20:00Z -> inside the
+    # window. Stripping tzinfo (old behavior) misread it as 05-10 and dropped it.
+    start = datetime(2025, 5, 1)
+    end = datetime(2025, 5, 9)
+    aware = datetime.fromisoformat("2025-05-10T01:00:00+05:00")
+    assert in_news_window(aware, start, end) is True
 
 
 @pytest.mark.unit
