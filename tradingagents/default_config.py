@@ -13,6 +13,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_QUICK_THINK_LLM":      "quick_think_llm",
     "TRADINGAGENTS_LLM_BACKEND_URL":      "backend_url",
     "TRADINGAGENTS_OUTPUT_LANGUAGE":      "output_language",
+    "TRADINGAGENTS_DEBATE_ENABLED":       "debate_enabled",
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS":    "max_debate_rounds",
     "TRADINGAGENTS_MAX_RISK_ROUNDS":      "max_risk_discuss_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
@@ -107,6 +108,17 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",
     # Debate and discussion settings
+    # Whether the Bull/Bear Researcher debate + Research Manager synthesis
+    # step runs at all. When False, that whole coordination layer is bypassed
+    # graph-structurally (not just given 0 rounds -- max_debate_rounds=0 does
+    # NOT skip it, since the graph unconditionally routes through Bull
+    # Researcher once before the round-count check ever applies) and the
+    # Trader reads the four analysts' reports directly. Exists to ablate
+    # whether the debate/coordination layer itself adds value versus a
+    # backbone-model change, per independent literature (arXiv:2603.27539)
+    # finding the debate layer -- not model quality -- drives most of
+    # TradingAgents/FinCon's reported edge.
+    "debate_enabled": True,
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
     "max_recur_limit": 100,

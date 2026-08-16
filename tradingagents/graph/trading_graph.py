@@ -129,6 +129,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            debate_enabled=self.config.get("debate_enabled", True),
         )
 
         self.propagator = Propagator(
@@ -354,6 +355,7 @@ class TradingAgentsGraph:
         """
         return "|".join([
             "analysts=" + ",".join(self.selected_analysts),
+            f"debate_enabled={self.config.get('debate_enabled', True)}",
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",

@@ -73,6 +73,16 @@ class HoldingRecommendation(str, Enum):
     that matters most for options positions, where the position itself may
     not even exist past today's close (theta decay), and a name-specific gap
     can swing the position more than a full session of intraday movement.
+
+    Downstream (Hermes' paper-trade exit monitor), only HOLD_OVERNIGHT changes
+    behavior — it extends the exit deadline to a bounded window the next
+    trading day (09:15-10:15 IST) to actually capture the close->open gap.
+    SQUARE_OFF_INTRADAY and DATA_DEPENDENT are both treated as same-day exit by
+    15:15 IST, so DATA_DEPENDENT is not a live "wait and see" — it's a
+    conservative default with the exact same effect as SQUARE_OFF_INTRADAY.
+    Given the whole point of this pipeline is catching the overnight gap, a
+    model that reflexively avoids HOLD_OVERNIGHT is quietly opting the
+    position out of the trade's actual edge every time.
     """
 
     HOLD_OVERNIGHT = "Hold Overnight"
@@ -234,7 +244,15 @@ class PortfolioDecision(BaseModel):
     )
     time_horizon: str | None = Field(
         default=None,
-        description="Optional recommended holding period, e.g. '3-6 months'.",
+        description=(
+            "Optional note on how long the thesis needs to play out, e.g. "
+            "'overnight' or 'by tomorrow's open' for the common case where "
+            "today's event is the catalyst. A multi-week/quarter horizon (e.g. "
+            "'next earnings, ~8 weeks') is only appropriate when that later "
+            "event is itself expected to move the instrument in the next "
+            "session — state that link explicitly if so, since the position "
+            "is not held that long regardless."
+        ),
     )
     holding_recommendation: HoldingRecommendation = Field(
         description=(

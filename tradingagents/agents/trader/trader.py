@@ -17,36 +17,79 @@ from tradingagents.agents.utils.structured import (
 )
 
 
-def create_trader(llm):
+_NO_POSITION_INSTRUCTION = (
+    "You are a trading agent analyzing market data to make investment decisions. "
+    "There is no existing position — every call is a fresh entry, typically an "
+    "options position opened today and closed at or shortly after tomorrow's open, "
+    "so the case for entering has to rest on what changes by then, not on a "
+    "multi-week or next-quarter development. "
+    "Based on your analysis, provide a specific recommendation to buy, sell, or hold."
+)
+
+_DEBATE_SKIPPED_PLACEHOLDER = (
+    "N/A — debate ablation run: Bull/Bear Researcher debate and Research Manager "
+    "synthesis were skipped for this run; the Trader read the analysts' reports "
+    "directly instead."
+)
+
+
+def create_trader(llm, debate_enabled: bool = True):
     structured_llm = bind_structured(llm, TraderProposal, "Trader")
 
     def trader_node(state, name):
         company_name = state["company_of_interest"]
         instrument_context = get_instrument_context_from_state(state)
-        investment_plan = state["investment_plan"]
 
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a trading agent analyzing market data to make investment decisions. "
-                    "Based on your analysis, provide a specific recommendation to buy, sell, or hold. "
-                    "Anchor your reasoning in the analysts' reports and the research plan."
-                    + get_language_instruction()
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Based on a comprehensive analysis by a team of analysts, here is an investment "
-                    f"plan tailored for {company_name}. {instrument_context} This plan incorporates "
-                    f"insights from current technical market trends, macroeconomic indicators, and "
-                    f"social media sentiment. Use this plan as a foundation for evaluating your next "
-                    f"trading decision.\n\nProposed Investment Plan: {investment_plan}\n\n"
-                    f"Leverage these insights to make an informed and strategic decision."
-                ),
-            },
-        ]
+        if debate_enabled:
+            investment_plan = state["investment_plan"]
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        _NO_POSITION_INSTRUCTION
+                        + " Anchor your reasoning in the analysts' reports and the research plan."
+                        + get_language_instruction()
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Based on a comprehensive analysis by a team of analysts, here is an investment "
+                        f"plan tailored for {company_name}. {instrument_context} This plan incorporates "
+                        f"insights from current technical market trends, macroeconomic indicators, and "
+                        f"social media sentiment. Use this plan as a foundation for evaluating your next "
+                        f"trading decision.\n\nProposed Investment Plan: {investment_plan}\n\n"
+                        f"Leverage these insights to make an informed and strategic decision."
+                    ),
+                },
+            ]
+        else:
+            # Debate ablation: no Bull/Bear debate, no Research Manager synthesis
+            # -- the Trader is the ONLY LLM call that sees the analysts' reports
+            # and has to form its own view directly from them, unmediated.
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        _NO_POSITION_INSTRUCTION
+                        + " No research debate or manager synthesis ran ahead of you for this "
+                        "run -- you are reading the raw analyst reports directly and forming "
+                        "your own view from them."
+                        + get_language_instruction()
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Here are four analysts' reports for {company_name}. {instrument_context}\n\n"
+                        f"Market Report: {state.get('market_report', 'N/A')}\n\n"
+                        f"Sentiment Report: {state.get('sentiment_report', 'N/A')}\n\n"
+                        f"News Report: {state.get('news_report', 'N/A')}\n\n"
+                        f"Fundamentals Report: {state.get('fundamentals_report', 'N/A')}\n\n"
+                        f"Weigh these directly and make an informed, strategic trading decision."
+                    ),
+                },
+            ]
 
         trader_plan = invoke_structured_or_freetext(
             structured_llm,
@@ -56,10 +99,17 @@ def create_trader(llm):
             "Trader",
         )
 
-        return {
+        result = {
             "messages": [AIMessage(content=trader_plan)],
             "trader_investment_plan": trader_plan,
             "sender": name,
         }
+        if not debate_enabled:
+            # Portfolio Manager reads state["investment_plan"] unconditionally --
+            # keep it populated with a clear sentinel rather than let a KeyError
+            # surface deep in a downstream node for what is actually just an
+            # intentionally-skipped step.
+            result["investment_plan"] = _DEBATE_SKIPPED_PLACEHOLDER
+        return result
 
     return functools.partial(trader_node, name="Trader")

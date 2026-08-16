@@ -43,19 +43,23 @@ def create_portfolio_manager(llm):
 
 {instrument_context}
 
+There is no existing position. Every decision here is a fresh entry, typically an options position opened today and closed at or shortly after tomorrow's open — the strategy's edge is specifically the close-to-open gap, not a multi-day directional hold. Do not phrase the executive summary or thesis in terms of trimming, adding to, or exiting a prior holding, and do not anchor on a catalyst weeks or months out (e.g. next quarter's earnings) as if it were the reason to act today, unless today's specific event is itself plausibly enough to move the instrument by tomorrow's open.
+
 ---
 
 **Rating Scale** (use exactly one):
-- **Buy**: Strong conviction to enter or add to position
-- **Overweight**: Favorable outlook, gradually increase exposure
-- **Hold**: Maintain current position, no action needed
-- **Underweight**: Reduce exposure, take partial profits
-- **Sell**: Exit position or avoid entry
+- **Buy**: Strong conviction to open a fresh long entry now
+- **Overweight**: Favorable outlook; a fresh long entry is worth taking, though conviction is not maximal
+- **Hold**: No new position warranted either way
+- **Underweight**: Cautious/bearish; a fresh short entry is worth taking, though conviction is not maximal
+- **Sell**: Strong conviction to open a fresh short entry now (or avoid any long entry)
 
 **Holding Recommendation** (use exactly one, independent of the rating above):
-- **Hold Overnight**: only when the thesis specifically depends on something that resolves after today's close (an anticipated catalyst, a multi-day setup still developing)
-- **Square Off Intraday**: today's move is what the thesis was for; no specific reason to carry overnight gap risk (and, if held via options, overnight theta decay)
-- **Data-Dependent**: the call genuinely hinges on how the position performs into the close — state that condition explicitly
+- **Hold Overnight**: this is the ONLY option under which the position survives past today's close and can actually be open at tomorrow's open. If the thesis is that today's event moves the price by tomorrow's open — the strategy's core edge, and the normal case whenever the rating is driven by a same-day trigger — you MUST pick Hold Overnight, or the position gets force-closed by 15:15 TODAY and never sees the move it was opened for. Do not pick this only when the setup is multi-day; pick it whenever the payoff you're describing happens at or after tomorrow's open.
+- **Square Off Intraday**: the payoff already happened DURING today's session (the gap or move you're trading already occurred intraday, before this decision), so there's nothing left to hold for overnight — the position should never survive to see tomorrow at all. This is a narrow case, not the default for a same-day-catalyst thesis.
+- **Data-Dependent**: no realistic scenario resolves the thesis one way by tomorrow's open, and the honest answer is genuinely conditional in a way neither of the above captures — this behaves as a conservative Square Off Intraday downstream (same 15:15 today force-close, no overnight exposure), so only use it when that fallback is actually correct, not as a hedge to avoid committing.
+
+Before finalizing, check your own `Time Horizon` and `Executive Summary` text: if either describes the position closing "at" or "after" tomorrow's open, `holding_recommendation` must be Hold Overnight — any other value directly contradicts what you just wrote, since the position will not exist by then otherwise.
 
 **Context:**
 - Research Manager's investment plan: **{research_plan}**

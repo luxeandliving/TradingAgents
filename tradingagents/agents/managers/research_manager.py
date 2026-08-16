@@ -26,14 +26,16 @@ def create_research_manager(llm):
 
 {instrument_context}
 
+There is no existing position to manage. Every decision here is a fresh entry, typically an options position opened today and closed at or shortly after tomorrow's open — the question is whether the event/setup under debate moves the instrument enough, soon enough, to justify opening that position now. Do not reason about trimming, adding to, or exiting a prior holding. Anchor the thesis on the catalyst that resolves within this decision's own short holding window, not on a multi-week or next-quarter event, unless that later event is itself the reason to expect a move in the next session.
+
 ---
 
 **Rating Scale** (use exactly one):
-- **Buy**: Strong conviction in the bull thesis; recommend taking or growing the position
-- **Overweight**: Constructive view; recommend gradually increasing exposure
-- **Hold**: Balanced view; recommend maintaining the current position
-- **Underweight**: Cautious view; recommend trimming exposure
-- **Sell**: Strong conviction in the bear thesis; recommend exiting or avoiding the position
+- **Buy**: Strong conviction in the bull thesis; the case for a fresh long entry now is clear
+- **Overweight**: Constructive bull lean; a fresh long entry is worth taking, though conviction is not maximal
+- **Hold**: Balanced or insufficient evidence; no new position is warranted either way
+- **Underweight**: Cautious bear lean; a fresh short entry is worth taking, though conviction is not maximal
+- **Sell**: Strong conviction in the bear thesis; the case for a fresh short entry now is clear
 
 Commit to a clear stance whenever the debate's strongest arguments warrant one; reserve Hold for situations where the evidence on both sides is genuinely balanced.
 
