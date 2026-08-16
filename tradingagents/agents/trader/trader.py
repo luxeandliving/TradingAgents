@@ -16,7 +16,6 @@ from tradingagents.agents.utils.structured import (
     invoke_structured_or_freetext,
 )
 
-
 _NO_POSITION_INSTRUCTION = (
     "You are a trading agent analyzing market data to make investment decisions. "
     "There is no existing position — every call is a fresh entry, typically an "

@@ -41,7 +41,7 @@ class TestDebateAblationGraphStructure:
     def test_debate_enabled_true_includes_debate_nodes(self):
         graph = _build_graph(debate_enabled=True)
         nodes = set(graph.get_graph().nodes.keys())
-        assert _DEBATE_NODES <= nodes
+        assert nodes >= _DEBATE_NODES
 
     def test_debate_enabled_false_excludes_debate_nodes(self):
         graph = _build_graph(debate_enabled=False)
@@ -60,7 +60,7 @@ class TestDebateAblationGraphStructure:
         llm = MagicMock()
         gs = GraphSetup(llm, llm, tool_nodes, cl)  # no debate_enabled kwarg
         graph = gs.setup_graph(("market",)).compile()
-        assert _DEBATE_NODES <= set(graph.get_graph().nodes.keys())
+        assert set(graph.get_graph().nodes.keys()) >= _DEBATE_NODES
 
 
 def _structured_trader_llm(captured: dict, proposal: TraderProposal | None = None):
@@ -102,7 +102,7 @@ class TestTraderDebateAblation:
             "news_report": "Guidance raised.",
             "fundamentals_report": "P/E 45x.",
         }
-        result = trader(state)
+        trader(state)
         prompt = captured["prompt"]
         user_content = " ".join(m["content"] for m in prompt if m["role"] == "user")
         assert "RSI 70, overbought." in user_content
