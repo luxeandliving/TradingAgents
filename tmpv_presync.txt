@@ -1,0 +1,14 @@
+## [7] TMPV.NS @ 2026-07-28
+**Trigger:** {'news_score': 0.344, 'technical': True, 'global_shock': False}
+**Decision:** Underweight
+**Elapsed:** 488s
+
+**Rating**: Underweight
+
+**Executive Summary**: Enter a modest put/put-debit-spread on TMPV.NS today, sized 2% of portfolio, targeting close-to-open downside follow-through from the still-digesting Q1 FY27 miss (PAT -80.3% YoY, EBITDA margin -230bps) and JLR guidance cut, with entry near 329 and a tight stop at 331 to invalidate cleanly if the 10 EMA is reclaimed. This is a fresh, event-driven overnight trade, not a multi-week hold — exit at/shortly after tomorrow's open regardless of outcome given the position's small size and defined risk.
+
+**Investment Thesis**: The research manager and trader converge on the only evidence that plausibly moves TMPV.NS by tomorrow's open: Q1 FY27 results just reported (80.3% YoY PAT decline, 230bps EBITDA margin contraction, forex swing) plus JLR's cautious guidance cut, with sentiment explicitly flagging the stock as "currently under selling pressure" — a live, unresolved catalyst rather than stale news. Technicals reinforce this: price below the 10 EMA/50 SMA/200 SMA, negative MACD, and contracting Bollinger Bands signaling an imminent directional break, with RSI at 35.5 indicating bearish bias without oversold capitulation that would set up a bounce.
+
+The bull/conservative case (cheap 6.99x forward P/E, July sales +59% YoY, EV growth +114%, technical stabilization after a 10% pullback) is real but addresses a multi-week-to-multi-quarter recovery story, not tomorrow's tape — the neutral analyst's arbitration confirms both transitory (supply/flooding) and structural (EV mix margin drag) pressures coexist, meaning the Q1 miss can't be waved away by one strong sales month. Critically, the conservative analyst's strongest point — that a 10% pre-existing decline plus stabilizing technicals could mean the repricing is largely done and a positive reversal (production resumption, JLR stabilization) could gap the stock up — is a legitimate overnight risk. That argues against high conviction/large size, but doesn't flip the direction: no new positive catalyst has emerged, only stale July data, so the immediate-term edge still favors follow-through selling per the research manager's synthesis.
+
+Consistent with the prior TMPV.NS lesson (July 28 cycle), the mistake was treating one strong sales data point as capable of overriding a multi-quarter earnings deterioration signal — that le

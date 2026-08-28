@@ -1,0 +1,23 @@
+==== retro_batch_10_v2_results.md ====
+ADANIPOWER.NS 2026-08-07 -> Hold
+PFC.NS 2026-08-07 -> Hold
+INFY.NS 2026-08-05 -> Hold
+PNB.NS 2026-07-28 -> Hold
+NMDC.NS 2026-07-28 -> Hold
+NBCC.NS 2026-07-28 -> Hold
+TMPV.NS 2026-07-28 -> Underweight
+BDL.NS 2026-07-28 -> Hold
+PGEL.NS 2026-07-28 -> Hold
+FEDERALBNK.NS 2026-07-28 -> Hold
+==== retro_batch_10_debate_off_results.md ====
+ADANIPOWER.NS 2026-08-07 -> Hold
+PFC.NS 2026-08-07 -> Hold
+INFY.NS 2026-08-05 -> Hold
+PNB.NS 2026-07-28 -> Hold
+NMDC.NS 2026-07-28 -> Hold
+==== retro_batch_10_debate_off_resume_results.md ====
+NBCC.NS 2026-07-28 -> Hold
+TMPV.NS 2026-07-28 -> Hold
+BDL.NS 2026-07-28 -> Hold
+PGEL.NS 2026-07-28 -> Hold
+FEDERALBNK.NS 2026-07-28 -> Hold

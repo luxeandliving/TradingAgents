@@ -1,0 +1,17 @@
+DECISION: Hold
+
+=== investment_plan (should be the ablation sentinel) ===
+N/A — debate ablation run: Bull/Bear Researcher debate and Research Manager synthesis were skipped for this run; the Trader read the analysts' reports directly instead.
+
+=== final_trade_decision ===
+**Rating**: Hold
+
+**Executive Summary**: No fresh options entry into tomorrow's open on NMDC.NS. Price is pinned in an eight-day ₹82.65–₹85.00 range with contracting ATR (down ~22%), MACD still negative (-0.95) though histogram mildly positive, RSI neutral at 44.45 — a direction-agnostic squeeze, not a resolved signal. All three analysts, despite disagreeing on 4-8 week direction, identify no scheduled catalyst (earnings, government data, macro print) that resolves this by tomorrow's open, so there's no edge to harvest in a close-to-open options structure. Stand aside; only revisit if price closes decisively above ₹85.00 or below ₹82.00 on volume >18M shares.
+
+**Investment Thesis**: This is a fresh one-day options decision, and the debate — despite its length — converges on the one fact that matters for that timeframe: there is no name-specific overnight catalyst. The aggressive analyst's bull case (9.95x PE, 0.72 PEG, production ramp) is a multi-week re-rating thesis with an admittedly fuzzy timeline ("5-10 days" for a breakout that hasn't been confirmed). The conservative analyst's bear case (55% net debt growth, decelerating sequential revenue growth 28.6%→19.2%→5.7%, two price cuts signaling soft demand) is likewise a structural, multi-quarter concern, not an overnight trigger. The neutral analyst's own expected-value math (~0% EV for holding, slightly negative for selling, scenario probabilities spread 40-45/30-35/25) confirms this is a coin-flip consolidation with no edge either way at today's close. Critically, the neutral analyst explicitly frames resolution on a 4-8 week horizon ("reassess in 12 weeks... hard stop at 82.00... profit target at 85.50") — none of that operates on a next-session basis. The technical rejection at ₹84.50 resistance cited by both conservative and neutral analysts argues against chasing a breakout that hasn't happened, while the aggressive analyst's own risk-reward math (1.25:1 realistic upside/downside per the conservative's rebuttal) is not compelling enough to justify a levered overnight options bet. Per the prior lesson on this name: entering compressed-volatility, no-catalyst squeezes to "stay in the game" has repeatedly cost 2.3-4.4% alpha; the correct read for a fresh next-session structure is to require confirmation, not to front-run an ambiguous range.
+
+**Holding Recommendation**: Square Off Intraday
+
+**Holding Rationale**: There is no position being opened today, and none of the analysts identified a same-day trigger (earnings, government announcement, macro print) capable of resolving the Bollinger compression by tomorrow's open — the bull and bear cases both explicitly hinge on multi-week developments (breakout confirmation, Q2 margin data, debt refinancing trajectory). With no thesis-specific reason to carry overnight gap risk, any exploratory intraday position should be squared off rather than held into tomorrow.
+
+**Time Horizon**: No position today; revisit only on a confirmed close above ₹85.00 or below ₹82.00 with volume >18M shares
