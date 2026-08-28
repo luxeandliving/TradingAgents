@@ -91,6 +91,66 @@ class HoldingRecommendation(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# Factor Extractor (structured decision_mode -- trading-workspace TradingAgents#19)
+# ---------------------------------------------------------------------------
+
+
+class FactorExtraction(BaseModel):
+    """Structured factors pulled from the four analyst reports, produced by a
+    single non-debating LLM call. This is the "structured" decision_mode's
+    replacement for the Bull/Bear/Research-Manager debate: the LLM's only job
+    is to extract/score named factors from prose it already has -- it does not
+    see or influence the deterministic scoring that follows (decision_model.py).
+    """
+
+    dated_catalyst_present: bool = Field(
+        description=(
+            "Whether any analyst identified a specific, dated event/catalyst "
+            "that could resolve within this decision's own short holding "
+            "window (same session or next open) -- not a multi-week/quarter "
+            "development."
+        ),
+    )
+    catalyst_hours_to_resolution: float | None = Field(
+        default=None,
+        description=(
+            "Estimated hours until the identified catalyst resolves, if "
+            "dated_catalyst_present is true. Null if no catalyst or the "
+            "timing is unclear."
+        ),
+    )
+    technical_direction: float = Field(
+        ge=-1.0, le=1.0,
+        description="Net technical-report directional lean, -1 (strongly bearish) to +1 (strongly bullish).",
+    )
+    technical_confidence: float = Field(
+        ge=0.0, le=1.0,
+        description="How clear-cut the technical setup is (0=ambiguous/two-sided, 1=unambiguous).",
+    )
+    sentiment_direction: float = Field(
+        ge=-1.0, le=1.0,
+        description="Net news/sentiment-report directional lean, -1 (strongly bearish) to +1 (strongly bullish).",
+    )
+    sentiment_confidence: float = Field(
+        ge=0.0, le=1.0,
+        description="How reliable/fresh the sentiment signal is (0=stale or contested, 1=fresh and one-sided).",
+    )
+    risk_flags: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Short tags for anything that should suppress conviction regardless "
+            "of the scores above, e.g. 'earnings in window', 'illiquid', "
+            "'contested by analysts', 'macro overhang'."
+        ),
+    )
+
+    @field_validator("catalyst_hours_to_resolution", mode="before")
+    @classmethod
+    def _coerce_catalyst_hours(cls, value):
+        return _coerce_optional_float(value)
+
+
+# ---------------------------------------------------------------------------
 # Research Manager
 # ---------------------------------------------------------------------------
 

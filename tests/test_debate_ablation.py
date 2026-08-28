@@ -24,14 +24,14 @@ from tradingagents.graph.setup import GraphSetup
 _DEBATE_NODES = {"Bull Researcher", "Bear Researcher", "Research Manager"}
 
 
-def _build_graph(debate_enabled: bool):
+def _build_graph(decision_mode: str):
     """Builds a real compiled graph with mocked LLM/tool-node objects -- node
     *factories* like create_bull_researcher(llm) just build closures, they
     never call the LLM, so this is free and needs no API key."""
     cl = ConditionalLogic(max_debate_rounds=1, max_risk_discuss_rounds=1)
     tool_nodes = {k: MagicMock() for k in ("market", "social", "news", "fundamentals")}
     llm = MagicMock()
-    gs = GraphSetup(llm, llm, tool_nodes, cl, debate_enabled=debate_enabled)
+    gs = GraphSetup(llm, llm, tool_nodes, cl, decision_mode=decision_mode)
     workflow = gs.setup_graph(("market",))
     return workflow.compile()
 
@@ -39,12 +39,12 @@ def _build_graph(debate_enabled: bool):
 @pytest.mark.unit
 class TestDebateAblationGraphStructure:
     def test_debate_enabled_true_includes_debate_nodes(self):
-        graph = _build_graph(debate_enabled=True)
+        graph = _build_graph(decision_mode="debate")
         nodes = set(graph.get_graph().nodes.keys())
         assert nodes >= _DEBATE_NODES
 
     def test_debate_enabled_false_excludes_debate_nodes(self):
-        graph = _build_graph(debate_enabled=False)
+        graph = _build_graph(decision_mode="off")
         nodes = set(graph.get_graph().nodes.keys())
         assert not (_DEBATE_NODES & nodes)
         # Everything else must still be present -- this ablates ONLY the
@@ -53,14 +53,36 @@ class TestDebateAblationGraphStructure:
                 "Conservative Analyst", "Neutral Analyst"} <= nodes
 
     def test_default_graph_setup_still_includes_debate(self):
-        """debate_enabled's default (True) must not silently change existing
+        """decision_mode's default ("debate") must not silently change existing
         callers that don't pass it at all."""
         cl = ConditionalLogic(max_debate_rounds=1, max_risk_discuss_rounds=1)
         tool_nodes = {k: MagicMock() for k in ("market", "social", "news", "fundamentals")}
         llm = MagicMock()
-        gs = GraphSetup(llm, llm, tool_nodes, cl)  # no debate_enabled kwarg
+        gs = GraphSetup(llm, llm, tool_nodes, cl)  # no decision_mode kwarg
         graph = gs.setup_graph(("market",)).compile()
         assert set(graph.get_graph().nodes.keys()) >= _DEBATE_NODES
+
+
+@pytest.mark.unit
+class TestStructuredDecisionModeGraphStructure:
+    """decision_mode="structured" (trading-workspace TradingAgents#19): a
+    third arm alongside debate on/off -- Factor Extractor replaces the
+    debate nodes, single pass straight to Trader, no debate loop."""
+
+    def test_structured_mode_includes_factor_extractor_excludes_debate_nodes(self):
+        graph = _build_graph(decision_mode="structured")
+        nodes = set(graph.get_graph().nodes.keys())
+        assert "Factor Extractor" in nodes
+        assert not (_DEBATE_NODES & nodes)
+        assert {"Trader", "Portfolio Manager", "Aggressive Analyst",
+                "Conservative Analyst", "Neutral Analyst"} <= nodes
+
+    def test_unknown_decision_mode_raises(self):
+        cl = ConditionalLogic(max_debate_rounds=1, max_risk_discuss_rounds=1)
+        tool_nodes = {k: MagicMock() for k in ("market", "social", "news", "fundamentals")}
+        llm = MagicMock()
+        with pytest.raises(ValueError, match="Unknown decision_mode"):
+            GraphSetup(llm, llm, tool_nodes, cl, decision_mode="bogus")
 
 
 def _structured_trader_llm(captured: dict, proposal: TraderProposal | None = None):

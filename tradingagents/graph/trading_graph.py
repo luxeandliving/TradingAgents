@@ -44,6 +44,20 @@ from .signal_processing import SignalProcessor
 logger = logging.getLogger(__name__)
 
 
+def _resolve_decision_mode(config: dict) -> str:
+    """Resolve config into one of "debate" / "off" / "structured".
+
+    config["decision_mode"] wins if explicitly set (trading-workspace
+    TradingAgents#19). Otherwise falls back to the older debate_enabled
+    boolean for backward compatibility with existing configs/tests that
+    only set that flag.
+    """
+    mode = config.get("decision_mode")
+    if mode is not None:
+        return mode
+    return "debate" if config.get("debate_enabled", True) else "off"
+
+
 def _coerce_max_retries(value):
     """Validate an ``llm_max_retries`` value to a non-negative int.
 
@@ -129,7 +143,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
-            debate_enabled=self.config.get("debate_enabled", True),
+            decision_mode=_resolve_decision_mode(self.config),
         )
 
         self.propagator = Propagator(
@@ -355,7 +369,7 @@ class TradingAgentsGraph:
         """
         return "|".join([
             "analysts=" + ",".join(self.selected_analysts),
-            f"debate_enabled={self.config.get('debate_enabled', True)}",
+            f"decision_mode={_resolve_decision_mode(self.config)}",
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",

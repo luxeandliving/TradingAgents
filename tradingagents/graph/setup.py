@@ -10,6 +10,7 @@ from tradingagents.agents import (
     create_bear_researcher,
     create_bull_researcher,
     create_conservative_debator,
+    create_factor_extractor,
     create_fundamentals_analyst,
     create_market_analyst,
     create_msg_delete,
@@ -51,14 +52,24 @@ class GraphSetup:
         deep_thinking_llm: Any,
         tool_nodes: dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
-        debate_enabled: bool = True,
+        decision_mode: str = "debate",
     ):
-        """Initialize with required components."""
+        """Initialize with required components.
+
+        decision_mode: "debate" (default) runs Bull/Bear Researcher + Research
+        Manager synthesis. "off" skips that layer entirely, Trader reads the
+        analysts' reports directly (the original ablation). "structured"
+        (trading-workspace TradingAgents#19) replaces it with a single Factor
+        Extractor LLM call + a deterministic scorer (decision_model.py) --
+        the LLM extracts named factors, a fixed formula makes the call.
+        """
+        if decision_mode not in ("debate", "off", "structured"):
+            raise ValueError(f"Unknown decision_mode: {decision_mode!r}")
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
-        self.debate_enabled = debate_enabled
+        self.decision_mode = decision_mode
 
     def setup_graph(
         self, selected_analysts=("market", "social", "news", "fundamentals")
@@ -82,14 +93,20 @@ class GraphSetup:
         }
 
         # Create researcher and manager nodes (skipped entirely below when
-        # debate_enabled=False -- the ablation, per the workspace's TradingAgents
+        # decision_mode != "debate" -- the ablation, per the workspace's TradingAgents
         # fix-plan, needs a real graph-structural bypass, not max_debate_rounds=0,
         # which does NOT skip Bull Researcher -- see conditional_logic.py).
-        if self.debate_enabled:
+        if self.decision_mode == "debate":
             bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
             bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
             research_manager_node = create_research_manager(self.deep_thinking_llm)
-        trader_node = create_trader(self.quick_thinking_llm, debate_enabled=self.debate_enabled)
+        elif self.decision_mode == "structured":
+            factor_extractor_node = create_factor_extractor(self.quick_thinking_llm)
+        # Trader reads state["investment_plan"] in both "debate" and "structured"
+        # modes (populated by the Research Manager or the Factor Extractor's
+        # deterministic scorer respectively) -- only "off" reads analyst reports
+        # directly.
+        trader_node = create_trader(self.quick_thinking_llm, debate_enabled=self.decision_mode != "off")
 
         # Create risk analysis nodes
         aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
@@ -107,10 +124,12 @@ class GraphSetup:
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
 
         # Add other nodes
-        if self.debate_enabled:
+        if self.decision_mode == "debate":
             workflow.add_node("Bull Researcher", bull_researcher_node)
             workflow.add_node("Bear Researcher", bear_researcher_node)
             workflow.add_node("Research Manager", research_manager_node)
+        elif self.decision_mode == "structured":
+            workflow.add_node("Factor Extractor", factor_extractor_node)
         workflow.add_node("Trader", trader_node)
         workflow.add_node("Aggressive Analyst", aggressive_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
@@ -135,14 +154,20 @@ class GraphSetup:
             )
             workflow.add_edge(current_tools, current_analyst)
 
-            # Connect to next analyst, or to Bull Researcher / straight to Trader
-            # (debate_enabled=False) if this is the last analyst.
+            # Connect to next analyst, or to the decision layer's entry point
+            # if this is the last analyst: Bull Researcher ("debate"), Factor
+            # Extractor ("structured"), or straight to Trader ("off").
             if i < len(plan.specs) - 1:
                 workflow.add_edge(current_clear, plan.specs[i + 1].agent_node)
             else:
-                workflow.add_edge(current_clear, "Bull Researcher" if self.debate_enabled else "Trader")
+                next_node = {
+                    "debate": "Bull Researcher",
+                    "structured": "Factor Extractor",
+                    "off": "Trader",
+                }[self.decision_mode]
+                workflow.add_edge(current_clear, next_node)
 
-        if self.debate_enabled:
+        if self.decision_mode == "debate":
             # Both research-debate edges share the complete DEBATE_PATH_MAP (#1088).
             for debate_node in ("Bull Researcher", "Bear Researcher"):
                 workflow.add_conditional_edges(
@@ -151,6 +176,9 @@ class GraphSetup:
                     DEBATE_PATH_MAP,
                 )
             workflow.add_edge("Research Manager", "Trader")
+        elif self.decision_mode == "structured":
+            # Single pass, no debate loop -- straight to Trader.
+            workflow.add_edge("Factor Extractor", "Trader")
         workflow.add_edge("Trader", "Aggressive Analyst")
         # All three risk edges share the complete RISK_ANALYSIS_PATH_MAP (#1088).
         for risk_node in ("Aggressive Analyst", "Conservative Analyst", "Neutral Analyst"):
