@@ -14,6 +14,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_LLM_BACKEND_URL":      "backend_url",
     "TRADINGAGENTS_OUTPUT_LANGUAGE":      "output_language",
     "TRADINGAGENTS_DEBATE_ENABLED":       "debate_enabled",
+    "TRADINGAGENTS_DECISION_MODE":        "decision_mode",
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS":    "max_debate_rounds",
     "TRADINGAGENTS_MAX_RISK_ROUNDS":      "max_risk_discuss_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
@@ -119,6 +120,20 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # finding the debate layer -- not model quality -- drives most of
     # TradingAgents/FinCon's reported edge.
     "debate_enabled": True,
+    # decision_mode overrides debate_enabled when explicitly set. One of:
+    # "debate" (default, same as debate_enabled=True), "off" (same as
+    # debate_enabled=False), or "structured" (trading-workspace
+    # TradingAgents#19) -- a third arm that replaces the debate/coordination
+    # layer with a single Factor Extractor LLM call (extracts named,
+    # bounded factors from the analyst reports) feeding a deterministic
+    # scorer (agents/managers/decision_model.py, not an LLM call) that makes
+    # the actual rating call via a fixed, auditable formula. Exists to A/B
+    # against "debate"/"off" directly on this workspace's own retro-
+    # validation data rather than trusting either side of the literature
+    # split on whether the debate layer earns its cost (see debate_enabled's
+    # comment above). None (the default) means "not set" -- falls back to
+    # debate_enabled.
+    "decision_mode": None,
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
     "max_recur_limit": 100,
