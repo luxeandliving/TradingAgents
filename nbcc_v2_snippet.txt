@@ -1,0 +1,10 @@
+## [6] NBCC.NS @ 2026-07-28
+**Trigger:** {'news_score': 0.0, 'technical': True, 'global_shock': False}
+**Decision:** Hold
+**Elapsed:** 501s
+
+**Rating**: Hold
+
+**Executive Summary**: No fresh options entry in NBCC.NS today. All three risk analysts, despite disagreeing on multi-week positioning, agree there is no binary event landing between today's close and tomorrow's open — Q2 FY27 results are 4-6 weeks out, order-flow updates are diffuse, and the technical setup (price below 50/200-SMA, MACD -2.27, RSI 38.79, contracting ATR/Bollinger) describes a slow consolidation, not an imminent one-day trigger. Sit out this session; revisit only if a same-day order-win >₹500-1000cr is announced or a decisive volume-confirmed break through ₹101.5 or ₹91.6 occurs intraday.
+
+**Investment Thesis**: The debate (Aggressive: accumulate now on order-book/margin strength; Conservative: zero position until Q2 validation; Neutral: tiered small-core entry with Q2 as bifurcation point) is entirely framed around a 4-8 week horizon and explicitly hinges on Q2 FY27 results (Aug-Sep) as the resolving catalyst — none of the three identifies anything that changes between today's close and tomorrow's open. The 
