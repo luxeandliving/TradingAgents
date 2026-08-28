@@ -11,9 +11,9 @@ Real, billed LLM calls -- ~$0.50/decision average per decide.py's docstring,
 so this batch (10 calls) is expected to cost roughly $3-6 and take ~50-80 min
 sequentially.
 """
-import sys
-import os
 import json
+import os
+import sys
 from datetime import datetime
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -35,7 +35,7 @@ except Exception as e:
     print(f"yfinance SSL patch failed: {e} -- downloads may fail")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from scripts.decide import run_decision
+from scripts.decide import run_decision  # noqa: E402
 
 # Identical inputs to retro_batch_10_v2_results.md / retro_batch_10_debate_off_results.md
 ENTRIES = [

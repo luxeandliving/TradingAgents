@@ -1,9 +1,11 @@
-import sys
 import os
+import sys
+
 import truststore
+
 truststore.inject_into_ssl()  # patches ssl.create_default_context → used by httpx (LLM calls)
 
-from datetime import datetime
+from datetime import datetime  # noqa: E402
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,8 +25,8 @@ try:
 except Exception as e:
     print(f"yfinance SSL patch failed: {e} — downloads may fail")
 
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.default_config import DEFAULT_CONFIG  # noqa: E402
+from tradingagents.graph.trading_graph import TradingAgentsGraph  # noqa: E402
 
 ENTRIES = [
     ("NMDC.NS",       "2026-06-12"),
@@ -40,10 +42,10 @@ config["max_debate_rounds"] = 1
 config["max_risk_discuss_rounds"] = 1
 
 results = []
-results.append(f"# Scanner Retroactive TradingAgents Run\n")
+results.append("# Scanner Retroactive TradingAgents Run\n")
 results.append(f"**Run date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-results.append(f"**Entry date analysed:** 2026-06-12 (scanner picks)\n")
-results.append(f"**Note:** M&M.NS skipped — TradingAgents path-safety regex blocks '&' character\n\n---\n")
+results.append("**Entry date analysed:** 2026-06-12 (scanner picks)\n")
+results.append("**Note:** M&M.NS skipped — TradingAgents path-safety regex blocks '&' character\n\n---\n")
 
 for ticker, date in ENTRIES:
     print(f"\n{'='*60}")
