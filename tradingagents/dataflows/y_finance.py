@@ -271,9 +271,80 @@ def get_stockstats_indicator(
     return str(indicator_value)
 
 
+# Quarter-result-derived .info fields -- these change with each reported
+# quarter and are the leak vector fixed below. Slower-moving profile fields
+# (Name/Sector/Industry/Beta/52-week & moving-average prices) are left alone;
+# they carry far less look-ahead risk and a live price snapshot is already
+# how the rest of this codebase treats "current price" for retro runs.
+_QUARTER_SENSITIVE_FUNDAMENTALS_FIELDS = {
+    "PE Ratio (TTM)", "Forward PE", "PEG Ratio", "Price to Book",
+    "EPS (TTM)", "Forward EPS", "Revenue (TTM)", "Gross Profit", "EBITDA",
+    "Net Income", "Profit Margin", "Operating Margin", "Return on Equity",
+    "Return on Assets", "Debt to Equity", "Current Ratio", "Book Value",
+    "Free Cash Flow",
+}
+
+
+def _earnings_dates_reported(ticker_obj, limit: int = 12):
+    """Fetch real earnings-announcement dates with an actually-reported EPS.
+
+    Returns a tz-naive DatetimeIndex, or None on any failure (network,
+    unsupported ticker, etc.) -- callers must treat None as "unknown,
+    fall back to the pre-fix behavior" rather than raise, since this is an
+    extra guard on top of existing data fetches, not their primary path.
+    """
+    try:
+        ed = yf_retry(lambda: ticker_obj.get_earnings_dates(limit=limit))
+        if ed is None or ed.empty or "Reported EPS" not in ed.columns:
+            return None
+        reported = ed[ed["Reported EPS"].notna()]
+        if reported.empty:
+            return None
+        # curr_date carries no time-of-day anywhere else in this codebase --
+        # normalize to the calendar date so an announcement timestamped, say,
+        # 2026-07-18 08:00 UTC (from a source's own local afternoon) still
+        # counts as "known as of 2026-07-18", not "known as of 2026-07-19".
+        return pd.to_datetime(reported.index, utc=True).tz_convert(None).normalize()
+    except Exception:
+        return None
+
+
+def _count_announced_quarters(ticker_obj, curr_date: str):
+    """How many real quarterly earnings had been announced by curr_date.
+
+    Used to cap financial-statement columns (which are keyed by fiscal
+    PERIOD-END date, not announcement date) so a quarter whose period ended
+    before curr_date but whose results weren't announced until after it
+    can't leak through the naive period-end date mask (TradingAgents#19,
+    2026-08-29). Returns None (no extra cap applied) if the check itself
+    can't be performed.
+    """
+    dates = _earnings_dates_reported(ticker_obj)
+    if dates is None:
+        return None
+    cutoff = pd.Timestamp(curr_date).normalize()
+    return int((dates <= cutoff).sum())
+
+
+def _unannounced_quarter_leaked(ticker_obj, curr_date: str) -> bool:
+    """True if a real earnings announcement landed strictly after curr_date.
+
+    ``ticker_obj.info`` has no historical mode -- it always reflects the
+    latest reported quarter as of whenever the call actually runs (today),
+    regardless of the retro curr_date being reasoned about. If a real
+    announcement happened between curr_date and today, that live snapshot
+    may already carry a quarter's numbers this decision shouldn't see yet.
+    """
+    dates = _earnings_dates_reported(ticker_obj)
+    if dates is None:
+        return False
+    cutoff = pd.Timestamp(curr_date).normalize()
+    return bool((dates > cutoff).any())
+
+
 def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
-    curr_date: Annotated[str, "current date (not used for yfinance)"] = None
+    curr_date: Annotated[str, "current date, used to embargo quarter-dependent fields not yet publicly announced as of this date"] = None
 ):
     """Get company fundamentals overview from yfinance."""
     canonical = normalize_symbol(ticker)
@@ -315,6 +386,13 @@ def get_fundamentals(
             ("Free Cash Flow", info.get("freeCashflow")),
         ]
 
+        embargoed = curr_date is not None and _unannounced_quarter_leaked(ticker_obj, curr_date)
+        if embargoed:
+            fields = [
+                (label, value) for label, value in fields
+                if label not in _QUARTER_SENSITIVE_FUNDAMENTALS_FIELDS
+            ]
+
         lines = []
         for label, value in fields:
             if value is not None:
@@ -328,7 +406,17 @@ def get_fundamentals(
             raise NoMarketDataError(ticker, canonical, "no fundamental fields returned")
 
         header = f"# Company Fundamentals for {canonical}\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        if embargoed:
+            header += (
+                f"# NOTE: a quarterly results announcement landed after {curr_date} -- "
+                "quarter-dependent metrics (revenue, EPS, margins, valuation ratios "
+                "derived from them, etc.) are omitted here since this live data "
+                "source can't reconstruct their pre-announcement values. See the "
+                "income/balance-sheet/cash-flow statement tools for point-in-time "
+                "figures instead.\n"
+            )
+        header += "\n"
 
         return header + "\n".join(lines)
 
@@ -350,10 +438,12 @@ def get_balance_sheet(
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet)
+            keep_at_most = _count_announced_quarters(ticker_obj, curr_date) if curr_date else None
         else:
             data = yf_retry(lambda: ticker_obj.balance_sheet)
+            keep_at_most = None
 
-        data = filter_financials_by_date(data, curr_date)
+        data = filter_financials_by_date(data, curr_date, keep_at_most=keep_at_most)
 
         if data.empty:
             raise NoMarketDataError(ticker, canonical, "no balance sheet data")
@@ -385,10 +475,12 @@ def get_cashflow(
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_cashflow)
+            keep_at_most = _count_announced_quarters(ticker_obj, curr_date) if curr_date else None
         else:
             data = yf_retry(lambda: ticker_obj.cashflow)
+            keep_at_most = None
 
-        data = filter_financials_by_date(data, curr_date)
+        data = filter_financials_by_date(data, curr_date, keep_at_most=keep_at_most)
 
         if data.empty:
             raise NoMarketDataError(ticker, canonical, "no cash flow data")
@@ -420,10 +512,12 @@ def get_income_statement(
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_income_stmt)
+            keep_at_most = _count_announced_quarters(ticker_obj, curr_date) if curr_date else None
         else:
             data = yf_retry(lambda: ticker_obj.income_stmt)
+            keep_at_most = None
 
-        data = filter_financials_by_date(data, curr_date)
+        data = filter_financials_by_date(data, curr_date, keep_at_most=keep_at_most)
 
         if data.empty:
             raise NoMarketDataError(ticker, canonical, "no income statement data")
