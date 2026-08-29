@@ -222,7 +222,7 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
 
 
 def filter_financials_by_date(
-    data: pd.DataFrame, curr_date: str, keep_at_most: int | None = None
+    data: pd.DataFrame, curr_date: str, drop_newest: bool = False
 ) -> pd.DataFrame:
     """Drop financial statement columns (fiscal period timestamps) after curr_date.
 
@@ -234,21 +234,26 @@ def filter_financials_by_date(
     it were already public knowledge (a real look-ahead-bias bug found via
     TradingAgents#19's structured-mode catalyst cohort, 2026-08-29).
 
-    ``keep_at_most`` closes that gap: callers pass the count of quarters
-    actually announced (per real earnings-date data) by curr_date. Since
-    yfinance financial statements are newest-column-first and the date mask
-    above only excludes genuinely future period-ends, any leaked-but-
-    unannounced quarter is necessarily among the newest surviving columns --
-    so this keeps the OLDEST ``keep_at_most`` of them (trimming excess off
-    the newest end), not the newest ``keep_at_most``.
+    ``drop_newest`` closes that gap: callers pass True when a real earnings
+    announcement (per actual earnings-date data, not the fiscal-period
+    heuristic) landed strictly after curr_date. Quarterly reporting cadence
+    (~90 days) is always much longer than the reporting lag (2-4 weeks), so
+    at most ONE quarter can ever be stuck in "ended but not yet announced" at
+    a time -- it is necessarily the newest surviving column, since every
+    older one was both ended and announced long before curr_date. An earlier
+    version of this fix tried to cap by a *count* of historically-announced
+    quarters, but yfinance only ever returns a handful of quarterly columns
+    to begin with (regardless of how many years of real earnings history
+    exist), making a lifetime count useless as a cap -- confirmed live on
+    ASIANPAINT.NS still leaking post-"fix" (TradingAgents#21 follow-up).
     """
     if not curr_date or data.empty:
         return data
     cutoff = pd.Timestamp(curr_date)
     mask = pd.to_datetime(data.columns, errors="coerce") <= cutoff
     filtered = data.loc[:, mask]
-    if keep_at_most is not None:
-        filtered = filtered.iloc[:, 0:0] if keep_at_most <= 0 else filtered.iloc[:, -keep_at_most:]
+    if drop_newest and filtered.shape[1] > 0:
+        filtered = filtered.iloc[:, 1:]
     return filtered
 
 

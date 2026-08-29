@@ -309,23 +309,6 @@ def _earnings_dates_reported(ticker_obj, limit: int = 12):
         return None
 
 
-def _count_announced_quarters(ticker_obj, curr_date: str):
-    """How many real quarterly earnings had been announced by curr_date.
-
-    Used to cap financial-statement columns (which are keyed by fiscal
-    PERIOD-END date, not announcement date) so a quarter whose period ended
-    before curr_date but whose results weren't announced until after it
-    can't leak through the naive period-end date mask (TradingAgents#19,
-    2026-08-29). Returns None (no extra cap applied) if the check itself
-    can't be performed.
-    """
-    dates = _earnings_dates_reported(ticker_obj)
-    if dates is None:
-        return None
-    cutoff = pd.Timestamp(curr_date).normalize()
-    return int((dates <= cutoff).sum())
-
-
 def _unannounced_quarter_leaked(ticker_obj, curr_date: str) -> bool:
     """True if a real earnings announcement landed strictly after curr_date.
 
@@ -438,12 +421,12 @@ def get_balance_sheet(
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet)
-            keep_at_most = _count_announced_quarters(ticker_obj, curr_date) if curr_date else None
+            drop_newest = curr_date is not None and _unannounced_quarter_leaked(ticker_obj, curr_date)
         else:
             data = yf_retry(lambda: ticker_obj.balance_sheet)
-            keep_at_most = None
+            drop_newest = False
 
-        data = filter_financials_by_date(data, curr_date, keep_at_most=keep_at_most)
+        data = filter_financials_by_date(data, curr_date, drop_newest=drop_newest)
 
         if data.empty:
             raise NoMarketDataError(ticker, canonical, "no balance sheet data")
@@ -475,12 +458,12 @@ def get_cashflow(
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_cashflow)
-            keep_at_most = _count_announced_quarters(ticker_obj, curr_date) if curr_date else None
+            drop_newest = curr_date is not None and _unannounced_quarter_leaked(ticker_obj, curr_date)
         else:
             data = yf_retry(lambda: ticker_obj.cashflow)
-            keep_at_most = None
+            drop_newest = False
 
-        data = filter_financials_by_date(data, curr_date, keep_at_most=keep_at_most)
+        data = filter_financials_by_date(data, curr_date, drop_newest=drop_newest)
 
         if data.empty:
             raise NoMarketDataError(ticker, canonical, "no cash flow data")
@@ -512,12 +495,12 @@ def get_income_statement(
 
         if freq.lower() == "quarterly":
             data = yf_retry(lambda: ticker_obj.quarterly_income_stmt)
-            keep_at_most = _count_announced_quarters(ticker_obj, curr_date) if curr_date else None
+            drop_newest = curr_date is not None and _unannounced_quarter_leaked(ticker_obj, curr_date)
         else:
             data = yf_retry(lambda: ticker_obj.income_stmt)
-            keep_at_most = None
+            drop_newest = False
 
-        data = filter_financials_by_date(data, curr_date, keep_at_most=keep_at_most)
+        data = filter_financials_by_date(data, curr_date, drop_newest=drop_newest)
 
         if data.empty:
             raise NoMarketDataError(ticker, canonical, "no income statement data")

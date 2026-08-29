@@ -1,5 +1,5 @@
 """Look-ahead-bias fix for retro/backtest fundamentals data (TradingAgents#19
-structured-mode catalyst cohort, 2026-08-29).
+structured-mode catalyst cohort, 2026-08-29; follow-up fix 2026-08-30).
 
 yfinance financial statements are keyed by fiscal PERIOD-END date, not the
 date results were actually announced. Indian companies typically report
@@ -11,10 +11,22 @@ that quarter's actual revenue/NIM figures. ``get_fundamentals`` was worse:
 its ``curr_date`` param was documented as "not used for yfinance" and always
 reflected today's live snapshot regardless of the requested retro date.
 
-These tests cover the fix: `filter_financials_by_date`'s new `keep_at_most`
-cap (driven by a real count of announced quarters, not period-end dates
-alone), and `get_fundamentals`'s new embargo of quarter-dependent fields
-when a real announcement landed after curr_date.
+A first fix attempt (2026-08-29, PR #22) capped financial-statement columns
+by a *count* of historically-announced quarters (``keep_at_most``). It
+passed its own tests but still leaked live on ASIANPAINT.NS (2026-08-30):
+the real count of a mature company's lifetime announced quarters (dozens)
+vastly exceeds the handful of columns yfinance actually returns for
+`quarterly_income_stmt` etc (~5), so the cap was silently a no-op in
+practice. Corrected design: since quarterly cadence (~90 days) is always
+much longer than reporting lag (2-4 weeks), at most ONE quarter can ever be
+stuck in "ended but not yet announced" at a time, and it's necessarily the
+newest surviving column -- so the fix is a boolean ``drop_newest`` driven by
+``_unannounced_quarter_leaked()`` (a real announcement-date check), not a count.
+
+These tests cover: `filter_financials_by_date`'s `drop_newest` param,
+`get_fundamentals`'s embargo of quarter-dependent fields, and the specific
+"many known quarters but few data columns" shape that broke the first
+attempt.
 """
 import unittest
 from unittest import mock
@@ -42,85 +54,83 @@ _ICICIBANK_LIKE_EARNINGS = _earnings_dates_df([
     ("2025-10-18 05:00:00-04:00", 17.06),
 ])
 
+# The shape that broke the first fix attempt: a mature company with many
+# years of real announced quarters (Reported EPS present), far more than
+# yfinance's quarterly_income_stmt ever actually returns as columns (~5).
+# All "reported" rows are strictly in the past relative to the curr_dates
+# these tests use (2026-07-28/29) -- a future date can't already have a
+# real Reported EPS, so none of the past-quarter rows may land after it.
+_LONG_HISTORY_EARNINGS = _earnings_dates_df(
+    [("2026-10-17 06:00:00-04:00", None), ("2026-07-29 04:00:00-04:00", 16.05)]
+    + [(f"{2025 - (i // 4)}-{['01', '04', '07', '10'][i % 4]}-15 04:00:00-04:00", float(i))
+       for i in range(22)]
+)
+
 
 @pytest.mark.unit
-class FilterFinancialsByDateKeepAtMostTests(unittest.TestCase):
-    def test_keep_at_most_trims_excess_off_the_newest_end(self):
-        # Columns are newest-first; any leaked-but-unannounced quarter is
-        # always among the newest survivors, so keep_at_most must trim from
-        # that end and keep the OLDEST N, not the newest N.
+class FilterFinancialsByDateDropNewestTests(unittest.TestCase):
+    def test_drop_newest_removes_only_the_single_newest_surviving_column(self):
         data = pd.DataFrame(
             {c: [1.0] for c in ["2026-06-30", "2026-03-31", "2025-12-31"]}
         )
-        out = filter_financials_by_date(data, "2026-07-17", keep_at_most=1)
-        self.assertEqual(list(out.columns), ["2025-12-31"])
+        out = filter_financials_by_date(data, "2026-07-28", drop_newest=True)
+        self.assertEqual(list(out.columns), ["2026-03-31", "2025-12-31"])
 
-    def test_keep_at_most_zero_drops_all_columns(self):
-        data = pd.DataFrame(
-            {c: [1.0] for c in ["2026-06-30", "2026-03-31"]}
-        )
-        out = filter_financials_by_date(data, "2026-07-17", keep_at_most=0)
-        self.assertEqual(list(out.columns), [])
-
-    def test_none_keep_at_most_preserves_prior_behavior(self):
+    def test_drop_newest_false_preserves_prior_behavior(self):
         data = pd.DataFrame(
             {c: [1.0] for c in ["2026-06-30", "2026-03-31", "2025-12-31"]}
         )
-        out = filter_financials_by_date(data, "2026-07-17", keep_at_most=None)
+        out = filter_financials_by_date(data, "2026-07-28", drop_newest=False)
         self.assertEqual(list(out.columns), ["2026-06-30", "2026-03-31", "2025-12-31"])
 
-    def test_date_mask_still_applies_before_the_cap(self):
+    def test_drop_newest_on_empty_survivors_is_a_noop(self):
+        data = pd.DataFrame(columns=["2026-06-30"])
+        out = filter_financials_by_date(data.iloc[:, 0:0], "2026-07-28", drop_newest=True)
+        self.assertEqual(list(out.columns), [])
+
+    def test_date_mask_still_applies_before_the_drop(self):
         # A column strictly after curr_date is dropped by the existing date
-        # mask regardless of keep_at_most.
+        # mask regardless of drop_newest.
         data = pd.DataFrame(
             {c: [1.0] for c in ["2026-09-30", "2026-06-30", "2026-03-31"]}
         )
-        out = filter_financials_by_date(data, "2026-07-17", keep_at_most=5)
-        self.assertEqual(list(out.columns), ["2026-06-30", "2026-03-31"])
+        out = filter_financials_by_date(data, "2026-07-28", drop_newest=True)
+        self.assertEqual(list(out.columns), ["2026-03-31"])
 
     def test_empty_data_or_no_curr_date_unaffected(self):
         data = pd.DataFrame({"2026-06-30": [1.0]})
-        self.assertTrue(filter_financials_by_date(data, None, keep_at_most=1).equals(data))
+        self.assertTrue(filter_financials_by_date(data, None, drop_newest=True).equals(data))
         empty = pd.DataFrame()
-        self.assertTrue(filter_financials_by_date(empty, "2026-07-17", keep_at_most=1).empty)
+        self.assertTrue(filter_financials_by_date(empty, "2026-07-28", drop_newest=True).empty)
 
 
 @pytest.mark.unit
-class AnnouncedQuartersHelperTests(unittest.TestCase):
+class UnannouncedQuarterLeakTests(unittest.TestCase):
     def _mock_ticker(self, earnings_df):
         ticker_obj = mock.Mock()
         ticker_obj.get_earnings_dates.return_value = earnings_df
         return ticker_obj
 
-    def test_count_announced_quarters_excludes_future_and_unreported_rows(self):
-        ticker_obj = self._mock_ticker(_ICICIBANK_LIKE_EARNINGS)
-        # curr_date is the day BEFORE the real 2026-07-18 announcement --
-        # only the 3 older, already-reported rows should count.
-        count = y_finance._count_announced_quarters(ticker_obj, "2026-07-17")
-        self.assertEqual(count, 3)
-
-    def test_count_announced_quarters_includes_same_day_announcement(self):
-        ticker_obj = self._mock_ticker(_ICICIBANK_LIKE_EARNINGS)
-        count = y_finance._count_announced_quarters(ticker_obj, "2026-07-18")
-        self.assertEqual(count, 4)
-
-    def test_count_returns_none_on_fetch_failure(self):
-        ticker_obj = mock.Mock()
-        ticker_obj.get_earnings_dates.side_effect = RuntimeError("network down")
-        self.assertIsNone(y_finance._count_announced_quarters(ticker_obj, "2026-07-17"))
-
-    def test_unannounced_quarter_leaked_true_when_real_announcement_is_after_curr_date(self):
+    def test_true_when_real_announcement_is_after_curr_date(self):
         ticker_obj = self._mock_ticker(_ICICIBANK_LIKE_EARNINGS)
         self.assertTrue(y_finance._unannounced_quarter_leaked(ticker_obj, "2026-07-17"))
 
-    def test_unannounced_quarter_leaked_false_once_curr_date_is_on_or_after_it(self):
+    def test_false_once_curr_date_is_on_or_after_it(self):
         ticker_obj = self._mock_ticker(_ICICIBANK_LIKE_EARNINGS)
         self.assertFalse(y_finance._unannounced_quarter_leaked(ticker_obj, "2026-07-18"))
 
-    def test_unannounced_quarter_leaked_false_on_fetch_failure(self):
+    def test_false_on_fetch_failure(self):
         ticker_obj = mock.Mock()
         ticker_obj.get_earnings_dates.side_effect = RuntimeError("network down")
         self.assertFalse(y_finance._unannounced_quarter_leaked(ticker_obj, "2026-07-17"))
+
+    def test_true_for_a_mature_company_with_decades_of_reported_quarters(self):
+        # Regression guard for the count-based approach's actual failure
+        # mode: many real announced quarters in history is irrelevant to
+        # whether THIS specific upcoming one has leaked.
+        ticker_obj = self._mock_ticker(_LONG_HISTORY_EARNINGS)
+        self.assertTrue(y_finance._unannounced_quarter_leaked(ticker_obj, "2026-07-28"))
+        self.assertFalse(y_finance._unannounced_quarter_leaked(ticker_obj, "2026-07-29"))
 
 
 @pytest.mark.unit
@@ -170,10 +180,6 @@ class GetFundamentalsEmbargoTests(unittest.TestCase):
 @pytest.mark.unit
 class GetIncomeStatementQuarterCapTests(unittest.TestCase):
     def test_unannounced_quarter_column_dropped_even_though_period_end_predates_curr_date(self):
-        # 2026-06-30's period end (< curr_date) would pass the naive date
-        # mask, but its real announcement (2026-07-18) is after curr_date --
-        # the fix must still exclude it. 3 quarters (Mar31/Dec31/Sep30) had
-        # really been announced by curr_date per _ICICIBANK_LIKE_EARNINGS.
         cols = [
             pd.Timestamp("2026-06-30"), pd.Timestamp("2026-03-31"),
             pd.Timestamp("2025-12-31"), pd.Timestamp("2025-09-30"),
@@ -203,8 +209,8 @@ class GetIncomeStatementQuarterCapTests(unittest.TestCase):
 
         self.assertIn("2026-06-30", report)
 
-    def test_annual_frequency_is_not_capped_by_announced_quarter_count(self):
-        # keep_at_most is quarterly-earnings-specific; annual statements keep
+    def test_annual_frequency_never_checks_earnings_dates(self):
+        # drop_newest is quarterly-earnings-specific; annual statements keep
         # the pre-existing date-mask-only behavior.
         cols = [pd.Timestamp("2026-03-31"), pd.Timestamp("2025-03-31")]
         data = pd.DataFrame({c: [100.0] for c in cols})
@@ -218,6 +224,29 @@ class GetIncomeStatementQuarterCapTests(unittest.TestCase):
         self.assertIn("2026-03-31", report)
         self.assertIn("2025-03-31", report)
         ticker_obj.get_earnings_dates.assert_not_called()
+
+    def test_mature_company_only_drops_the_single_leaked_column_not_all(self):
+        # The exact shape that broke the first fix attempt (PR #22): a real
+        # DataFrame with only 5 quarterly columns, but a much longer real
+        # earnings-announcement history (22+ reported quarters) behind it.
+        # A count-based cap (23 announced >= 5 columns) is a no-op here;
+        # drop_newest correctly removes just the one leaked column.
+        cols = [
+            pd.Timestamp("2026-06-30"), pd.Timestamp("2026-03-31"),
+            pd.Timestamp("2025-12-31"), pd.Timestamp("2025-09-30"),
+            pd.Timestamp("2025-06-30"),
+        ]
+        data = pd.DataFrame({c: [100.0] for c in cols})
+        ticker_obj = mock.Mock()
+        ticker_obj.quarterly_income_stmt = data
+        ticker_obj.get_earnings_dates.return_value = _LONG_HISTORY_EARNINGS
+
+        with mock.patch.object(y_finance.yf, "Ticker", return_value=ticker_obj):
+            report = y_finance.get_income_statement("ASIANPAINT.NS", "quarterly", "2026-07-28")
+
+        self.assertNotIn("2026-06-30", report)
+        self.assertIn("2026-03-31", report)
+        self.assertIn("2025-06-30", report)
 
 
 if __name__ == "__main__":
