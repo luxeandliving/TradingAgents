@@ -221,18 +221,35 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     return data
 
 
-def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
+def filter_financials_by_date(
+    data: pd.DataFrame, curr_date: str, keep_at_most: int | None = None
+) -> pd.DataFrame:
     """Drop financial statement columns (fiscal period timestamps) after curr_date.
 
-    yfinance financial statements use fiscal period end dates as columns.
-    Columns after curr_date represent future data and are removed to
-    prevent look-ahead bias.
+    yfinance financial statements use fiscal period END dates as columns, not
+    the date the quarter's results were actually announced. Indian companies
+    typically report 2-4 weeks after quarter-end, so a fiscal-period-end column
+    can be <= curr_date while its real announcement lands AFTER curr_date --
+    the naive date mask below lets that unannounced quarter leak through as if
+    it were already public knowledge (a real look-ahead-bias bug found via
+    TradingAgents#19's structured-mode catalyst cohort, 2026-08-29).
+
+    ``keep_at_most`` closes that gap: callers pass the count of quarters
+    actually announced (per real earnings-date data) by curr_date. Since
+    yfinance financial statements are newest-column-first and the date mask
+    above only excludes genuinely future period-ends, any leaked-but-
+    unannounced quarter is necessarily among the newest surviving columns --
+    so this keeps the OLDEST ``keep_at_most`` of them (trimming excess off
+    the newest end), not the newest ``keep_at_most``.
     """
     if not curr_date or data.empty:
         return data
     cutoff = pd.Timestamp(curr_date)
     mask = pd.to_datetime(data.columns, errors="coerce") <= cutoff
-    return data.loc[:, mask]
+    filtered = data.loc[:, mask]
+    if keep_at_most is not None:
+        filtered = filtered.iloc[:, 0:0] if keep_at_most <= 0 else filtered.iloc[:, -keep_at_most:]
+    return filtered
 
 
 class StockstatsUtils:
