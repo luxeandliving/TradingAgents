@@ -45,3 +45,8 @@ Recurring overlap (resolve by combining, never by `-X ours` / `-X theirs`):
 - `tradingagents/dataflows/yfinance_news.py` — use shared `date_window.in_window`; Indian RSS keeps `utils.in_news_window` (wrapper)
 
 After resolving: run `pytest -q` and open a PR. Do not push straight to `main`.
+
+**Merge the PR with a merge commit, never squash.** `main` allows merge commits
+(linear history is off) so the merge-base moves to the current `upstream/main`.
+Squashing (#33) left the tree correct but the merge-base at v0.3.1, so the next
+sync re-saw the same 27 commits and the same conflicts.
