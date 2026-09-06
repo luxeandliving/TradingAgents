@@ -91,6 +91,7 @@ def main() -> int:
     if merge.returncode == 0:
         print(f"clean merge on {branch}")
         print(f"next: git push -u origin {branch} && gh pr create --fill")
+        print("merge that PR with a merge commit, never squash")
         return 0
 
     conflicts = out(["git", "diff", "--name-only", "--diff-filter=U"]).splitlines()

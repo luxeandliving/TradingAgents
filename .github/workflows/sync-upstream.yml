@@ -52,7 +52,7 @@ jobs:
             if gh pr list --head "$BRANCH" --state open --json number --jq 'length' | grep -qx 0; then
               gh pr create \
                 --title "sync: pull upstream TradingAgents ($STAMP)" \
-                --body "$(printf 'Automatic weekly sync from TauricResearch/TradingAgents.\n\nThis merge was clean. Review still required — do not squash away fork-only files.\n\nPolicy: `docs/UPSTREAM_SYNC.md`\n\nIncoming:\n```\n%s\n```\n' "$INCOMING")"
+                --body "$(printf 'Automatic weekly sync from TauricResearch/TradingAgents.\n\nThis merge was clean. **Merge with a merge commit — do not squash** (linear history is off so the merge-base can advance).\n\nPolicy: `docs/UPSTREAM_SYNC.md`\n\nIncoming:\n```\n%s\n```\n' "$INCOMING")"
             fi
           else
             CONFLICTS=$(git diff --name-only --diff-filter=U)
