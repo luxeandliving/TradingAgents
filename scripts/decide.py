@@ -103,7 +103,18 @@ def _compute_cost(usage_metadata: dict) -> tuple[float, list]:
             unpriced.append(model_name)
             continue
         price_in, price_out = price
-        total += usage.get("input_tokens", 0) / 1_000_000 * price_in
+        # langchain's input_tokens already includes cache reads/writes; Anthropic
+        # bills reads at 0.1x, 5-minute writes at 1.25x and 1-hour writes at 2x.
+        # When the API itemises writes by TTL, langchain reports them under the
+        # ephemeral_* keys and leaves cache_creation at 0.
+        details = usage.get("input_token_details") or {}
+        cache_read = details.get("cache_read", 0) or 0
+        write_1h = details.get("ephemeral_1h_input_tokens", 0) or 0
+        write_5m = details.get("ephemeral_5m_input_tokens", 0) or 0
+        if not (write_1h or write_5m):
+            write_5m = details.get("cache_creation", 0) or 0
+        uncached = usage.get("input_tokens", 0) - cache_read - write_5m - write_1h
+        total += (uncached + 0.1 * cache_read + 1.25 * write_5m + 2 * write_1h) / 1_000_000 * price_in
         total += usage.get("output_tokens", 0) / 1_000_000 * price_out
     return round(total, 4), unpriced
 
