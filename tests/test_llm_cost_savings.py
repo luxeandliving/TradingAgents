@@ -108,3 +108,12 @@ class TestCacheAwareCost:
             "input_token_details": {"cache_read": 600_000, "cache_creation": 200_000}}}
         cost, _ = _decide()._compute_cost(usage)
         assert cost == pytest.approx((200_000 + 0.1 * 600_000 + 1.25 * 200_000) / 1_000_000 * 1.00)
+
+    def test_ttl_itemised_writes_are_priced(self):
+        usage = {"claude-haiku-4-5-20251001": {
+            "input_tokens": 1_000_000, "output_tokens": 0,
+            "input_token_details": {"cache_read": 0, "cache_creation": 0,
+                                    "ephemeral_5m_input_tokens": 300_000,
+                                    "ephemeral_1h_input_tokens": 100_000}}}
+        cost, _ = _decide()._compute_cost(usage)
+        assert cost == pytest.approx((600_000 + 1.25 * 300_000 + 2 * 100_000) / 1_000_000 * 1.00)
